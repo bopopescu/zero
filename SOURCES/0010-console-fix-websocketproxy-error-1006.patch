@@ -1,0 +1,34 @@
+From 52835e8b5f1fa5abef8bfe830757e94018853742 Mon Sep 17 00:00:00 2001
+From: Sahid Orentino Ferdjaoui <sahid.ferdjaoui@redhat.com>
+Date: Mon, 20 Apr 2015 15:01:01 +0200
+Subject: [PATCH] console: fix websocketproxy error (1006)
+
+The version of websocketproxy shipped with RHOS6
+does not provide the method msg with an extra argument
+to format the log entry.
+
+The fix uses the old way supported by the version shipped.
+
+Downstream-Only
+Resolves: rhbz#1217898
+Change-Id: I393beb5fc2561ddba5378908fdcffe4c639b9926
+Reviewed-on: https://code.engineering.redhat.com/gerrit/47353
+Reviewed-by: Sahid Ferdjaoui <sahid.ferdjaoui@redhat.com>
+Tested-by: Sahid Ferdjaoui <sahid.ferdjaoui@redhat.com>
+---
+ nova/console/websocketproxy.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/nova/console/websocketproxy.py b/nova/console/websocketproxy.py
+index 9e59c2a..58041fe 100644
+--- a/nova/console/websocketproxy.py
++++ b/nova/console/websocketproxy.py
+@@ -117,7 +117,7 @@ class NovaProxyRequestHandlerBase(object):
+                 detail = _("Origin header protocol does not match this host.")
+                 raise exception.ValidationError(detail=detail)
+ 
+-        self.msg(_('connect info: %s'), str(connect_info))
++        self.msg(_('connect info: %s') % str(connect_info))
+         host = connect_info['host']
+         port = int(connect_info['port'])
+ 

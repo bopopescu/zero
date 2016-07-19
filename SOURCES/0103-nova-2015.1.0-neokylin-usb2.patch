@@ -1,0 +1,59 @@
+diff -aruN nova-2015.1.0.org/nova/virt/libvirt/config.py nova-2015.1.0/nova/virt/libvirt/config.py
+--- nova-2015.1.0.org/nova/virt/libvirt/config.py	2015-12-25 10:13:06.203805839 +0800
++++ nova-2015.1.0/nova/virt/libvirt/config.py	2015-12-25 10:13:58.436455921 +0800
+@@ -1369,7 +1369,39 @@
+             controller.set("model", str(self.model))
+         return controller
+ 
++class LibvirtConfigGuestUsb2Controller(LibvirtConfigGuestDevice):#wz
+ 
++    def __init__(self, **kwargs):
++        super(LibvirtConfigGuestUsb2Controller,self).__init__(root_name="controller", **kwargs)
++        self.type = 'usb'
++        self.index = None
++        self.model = 'ich9-ehci1'
++
++    def format_dom(self):
++        controller = super(LibvirtConfigGuestUsb2Controller, self).format_dom()
++        controller.set("type", self.type)
++        if self.index is not None:
++            controller.set("index", str(self.index))
++        if self.model:
++            controller.set("model", str(self.model))
++        return controller
++
++class LibvirtConfigGuestUsbuhciController(LibvirtConfigGuestDevice):#wz
++
++    def __init__(self, **kwargs):
++        super(LibvirtConfigGuestUsbuhciController,self).__init__(root_name="controller", **kwargs)
++        self.type = 'usb'
++        self.index = None
++        self.model = 'ich9-uhci1'
++
++    def format_dom(self):
++        controller = super(LibvirtConfigGuestUsbuhciController, self).format_dom()
++        controller.set("type", self.type)
++        if self.index is not None:
++            controller.set("index", str(self.index))
++        if self.model:
++            controller.set("model", str(self.model))
++        return controller
+ 
+ class LibvirtConfigMemoryBalloon(LibvirtConfigGuestDevice):
+     def __init__(self, **kwargs):
+diff -aruN nova-2015.1.0.org/nova/virt/libvirt/driver.py nova-2015.1.0/nova/virt/libvirt/driver.py
+--- nova-2015.1.0.org/nova/virt/libvirt/driver.py	2015-12-25 10:13:06.202805884 +0800
++++ nova-2015.1.0/nova/virt/libvirt/driver.py	2015-12-25 10:14:10.627908730 +0800
+@@ -3898,9 +3898,9 @@
+         usbred2 =  vconfig.LibvirtConfigGuestUsbRed()
+         guest.add_device(usbred)
+         guest.add_device(usbred2)
+-        usb3ctl = vconfig.LibvirtConfigGuestUsb3Controller()
+-        guest.add_device(usb3ctl)
+-
++        usb2ctl = vconfig.LibvirtConfigGuestUsb2Controller()
++        guest.add_device(usb2ctl)
++        guest.add_device(vconfig.LibvirtConfigGuestUsbuhciController())
+     def _add_qga_device(self, guest, instance):
+         qga = vconfig.LibvirtConfigGuestChannel()
+         qga.type = "unix"

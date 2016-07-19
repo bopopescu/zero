@@ -1,0 +1,295 @@
+From 32bc85d97af916eb6516120acc65256b83614d3c Mon Sep 17 00:00:00 2001
+From: Dan Smith <dansmith@redhat.com>
+Date: Tue, 11 Aug 2015 12:30:14 -0700
+Subject: [PATCH] Limit parallel live migrations in progress
+
+This patch extends the previous one[1] to allow limiting the total number of parallel
+builds that nova-compute will attempt to cover live migrations. Since we can now
+block immediately on the semaphore, this also implements the behavior we have in
+build, which spawns a new thread for the process so that we don't starve our
+RPC workers waiting on the semaphore. In reality, live migrations take a long time,
+so this was something we should have already had.
+
+Further, as soon as we receive the request to do the live migration, we mark the
+migration object as status='queued' to indicate that it's waiting for its turn
+on the compute node. Once we're given a slot to run, the normal status='preparing'
+will be set. This will allow an operator to monitor the status of queued and
+running migrations.
+
+This includes a change to the libvirt driver to avoid spawning another thread
+for the live migrations process. That makes it synchronous from the perspective
+of compute manager, and in line with all the other drivers that support the
+operation. Since compute manager now spawns the thread, libvirt is unaffected
+and the other drivers avoid potentially starving the RPC worker pool as well.
+
+[1] Commit 5a542e770648469b0fbb638f6ba53f95424252ec
+
+DocImpact: Adds a new configuration variable to limit parallel live migrations.
+           Zero means "unlimited" and nonzero means "this many in parallel".
+
+Conflicts:
+	nova/compute/manager.py
+	nova/tests/unit/compute/test_compute_mgr.py
+	nova/tests/unit/virt/libvirt/test_driver.py
+	nova/virt/libvirt/driver.py
+
+Closes-Bug: #1478108
+Resolves: rhbz#1246633
+Upstream-Liberty: https://review.openstack.org/#/c/212065
+Change-Id: Ia8a796372746b7fc75485dc2e663f270dbd5893a
+(cherry picked from commit 2c0a306632351fd5bf35ff0ec3f0a133fbe8f1ac)
+Reviewed-on: https://code.engineering.redhat.com/gerrit/55187
+Tested-by: RHOS Jenkins <apevec+rhosci@redhat.com>
+Reviewed-by: Sahid Ferdjaoui <sahid.ferdjaoui@redhat.com>
+---
+ nova/compute/manager.py                     | 65 ++++++++++++++++++-----------
+ nova/tests/unit/compute/test_compute.py     |  8 +++-
+ nova/tests/unit/compute/test_compute_mgr.py | 49 ++++++++++++++++++++++
+ nova/tests/unit/virt/libvirt/fakelibvirt.py |  4 +-
+ nova/tests/unit/virt/libvirt/test_driver.py | 10 ++---
+ nova/virt/libvirt/driver.py                 |  6 +--
+ 6 files changed, 107 insertions(+), 35 deletions(-)
+
+diff --git a/nova/compute/manager.py b/nova/compute/manager.py
+index 65043ca..9ad9578 100644
+--- a/nova/compute/manager.py
++++ b/nova/compute/manager.py
+@@ -127,6 +127,14 @@ compute_opts = [
+     cfg.IntOpt('max_concurrent_builds',
+                default=10,
+                help='Maximum number of instance builds to run concurrently'),
++    cfg.IntOpt('max_concurrent_live_migrations',
++               default=1,
++               help='Maximum number of live migrations to run concurrently. '
++                    'This limit is enforced to avoid outbound live migrations '
++                    'overwhelming the host/network and causing failures. It '
++                    'is not recommended that you change this unless you are '
++                    'very sure that doing so is safe and stable in your '
++                    'environment.'),
+     cfg.IntOpt('block_device_allocate_retries',
+                default=60,
+                help='Number of times to retry block device'
+@@ -690,6 +698,11 @@ class ComputeManager(manager.Manager):
+                 CONF.max_concurrent_builds)
+         else:
+             self._build_semaphore = compute_utils.UnlimitedSemaphore()
++        if max(CONF.max_concurrent_live_migrations, 0) != 0:
++            self._live_migration_semaphore = eventlet.semaphore.Semaphore(
++                CONF.max_concurrent_live_migrations)
++        else:
++            self._live_migration_semaphore = compute_utils.UnlimitedSemaphore()
+ 
+         super(ComputeManager, self).__init__(service_name="compute",
+                                              *args, **kwargs)
+@@ -5188,30 +5201,8 @@ class ComputeManager(manager.Manager):
+ 
+         return pre_live_migration_data
+ 
+-    @wrap_exception()
+-    @wrap_instance_fault
+-    def live_migration(self, context, dest, instance, block_migration,
+-                       migrate_data):
+-        """Executing live migration.
+-
+-        :param context: security context
+-        :param instance: a nova.objects.instance.Instance object
+-        :param dest: destination host
+-        :param block_migration: if true, prepare for block migration
+-        :param migrate_data: implementation specific params
+-
+-        """
+-
+-        # NOTE(danms): since instance is not the first parameter, we can't
+-        # use @object_compat on this method. Since this is the only example,
+-        # we do this manually instead of complicating the decorator
+-        if not isinstance(instance, obj_base.NovaObject):
+-            expected = ['metadata', 'system_metadata',
+-                        'security_groups', 'info_cache']
+-            instance = objects.Instance._from_db_object(
+-                context, objects.Instance(), instance,
+-                expected_attrs=expected)
+-
++    def _do_live_migration(self, context, dest, instance, block_migration,
++                           migrate_data):
+         # Create a local copy since we'll be modifying the dictionary
+         migrate_data = dict(migrate_data or {})
+         try:
+@@ -5243,6 +5234,32 @@ class ComputeManager(manager.Manager):
+                                    self._rollback_live_migration,
+                                    block_migration, migrate_data)
+ 
++    @wrap_exception()
++    @wrap_instance_fault
++    def live_migration(self, context, dest, instance, block_migration,
++                       migrate_data):
++        """Executing live migration.
++
++        :param context: security context
++        :param dest: destination host
++        :param instance: a nova.objects.instance.Instance object
++        :param block_migration: if true, prepare for block migration
++        :param migration: an nova.objects.Migration object
++        :param migrate_data: implementation specific params
++
++        """
++
++        def dispatch_live_migration(*args, **kwargs):
++            with self._live_migration_semaphore:
++                self._do_live_migration(*args, **kwargs)
++
++        # NOTE(danms): We spawn here to return the RPC worker thread back to
++        # the pool. Since what follows could take a really long time, we don't
++        # want to tie up RPC workers.
++        utils.spawn_n(dispatch_live_migration,
++                      context, dest, instance,
++                      block_migration, migrate_data)
++
+     def _live_migration_cleanup_flags(self, block_migration, migrate_data):
+         """Determine whether disks or instance path need to be cleaned up after
+         live migration (at source on success, at destination on rollback)
+diff --git a/nova/tests/unit/compute/test_compute.py b/nova/tests/unit/compute/test_compute.py
+index d43971a..e5826dd 100644
+--- a/nova/tests/unit/compute/test_compute.py
++++ b/nova/tests/unit/compute/test_compute.py
+@@ -5469,8 +5469,10 @@ class ComputeTestCase(BaseTestCase):
+         # cleanup
+         db.instance_destroy(c, instance['uuid'])
+ 
+-    def test_live_migration_exception_rolls_back(self):
++    @mock.patch('nova.utils.spawn_n')
++    def test_live_migration_exception_rolls_back(self, mock_spawn):
+         # Confirm exception when pre_live_migration fails.
++        mock_spawn.side_effect = lambda f, *a, **k: f(*a, **k)
+         c = context.get_admin_context()
+ 
+         instance = self._create_fake_instance_obj(
+@@ -5536,9 +5538,11 @@ class ComputeTestCase(BaseTestCase):
+         self.assertEqual(vm_states.ACTIVE, instance.vm_state)
+         self.assertIsNone(instance.task_state)
+ 
+-    def test_live_migration_works_correctly(self):
++    @mock.patch('nova.utils.spawn_n')
++    def test_live_migration_works_correctly(self, mock_spawn):
+         # Confirm live_migration() works as expected correctly.
+         # creating instance testdata
++        mock_spawn.side_effect = lambda f, *a, **k: f(*a, **k)
+         c = context.get_admin_context()
+         instance = self._create_fake_instance_obj(context=c)
+         instance.host = self.compute.host
+diff --git a/nova/tests/unit/compute/test_compute_mgr.py b/nova/tests/unit/compute/test_compute_mgr.py
+index 93ff446..48f32b6 100644
+--- a/nova/tests/unit/compute/test_compute_mgr.py
++++ b/nova/tests/unit/compute/test_compute_mgr.py
+@@ -3665,3 +3665,52 @@ class ComputeManagerMigrationTestCase(test.NoDBTestCase):
+ 
+     def test_revert_resize_instance_destroy_disks_non_shared_storage(self):
+         self._test_revert_resize_instance_destroy_disks(is_shared=False)
++
++    @mock.patch('nova.utils.spawn_n')
++    @mock.patch('nova.compute.manager.ComputeManager.'
++                '_do_live_migration')
++    def _test_max_concurrent_live(self, mock_lm, mock_spawn):
++        mock_spawn.side_effect = lambda f, *a, **k: f(*a, **k)
++
++        @mock.patch('nova.objects.Migration.save')
++        def _do_it(mock_mig_save):
++            instance = objects.Instance(uuid=str(uuid.uuid4()))
++            self.compute.live_migration(self.context,
++                                        mock.sentinel.dest,
++                                        instance,
++                                        mock.sentinel.block_migration,
++                                        mock.sentinel.migrate_data)
++
++        with mock.patch.object(self.compute,
++                               '_live_migration_semaphore') as mock_sem:
++            for i in (1, 2, 3):
++                _do_it()
++        self.assertEqual(3, mock_sem.__enter__.call_count)
++
++    def test_max_concurrent_live_limited(self):
++        self.flags(max_concurrent_live_migrations=2)
++        self._test_max_concurrent_live()
++
++    def test_max_concurrent_live_unlimited(self):
++        self.flags(max_concurrent_live_migrations=0)
++        self._test_max_concurrent_live()
++
++    def test_max_concurrent_live_semaphore_limited(self):
++        self.flags(max_concurrent_live_migrations=123)
++        self.assertEqual(
++            123,
++            manager.ComputeManager()._live_migration_semaphore.balance)
++
++    def test_max_concurrent_live_semaphore_unlimited(self):
++        self.flags(max_concurrent_live_migrations=0)
++        compute = manager.ComputeManager()
++        self.assertEqual(0, compute._live_migration_semaphore.balance)
++        self.assertIsInstance(compute._live_migration_semaphore,
++                              compute_utils.UnlimitedSemaphore)
++
++    def test_max_concurrent_live_semaphore_negative(self):
++        self.flags(max_concurrent_live_migrations=-2)
++        compute = manager.ComputeManager()
++        self.assertEqual(0, compute._live_migration_semaphore.balance)
++        self.assertIsInstance(compute._live_migration_semaphore,
++                              compute_utils.UnlimitedSemaphore)
+diff --git a/nova/tests/unit/virt/libvirt/fakelibvirt.py b/nova/tests/unit/virt/libvirt/fakelibvirt.py
+index d297044..dd6e784 100644
+--- a/nova/tests/unit/virt/libvirt/fakelibvirt.py
++++ b/nova/tests/unit/virt/libvirt/fakelibvirt.py
+@@ -686,7 +686,9 @@ class Domain(object):
+         return {}
+ 
+     def jobInfo(self):
+-        return []
++        # NOTE(danms): This is an array of 12 integers, so just report
++        # something to avoid an IndexError if we look at this
++        return [0] * 12
+ 
+     def jobStats(self, flags=0):
+         return {}
+diff --git a/nova/tests/unit/virt/libvirt/test_driver.py b/nova/tests/unit/virt/libvirt/test_driver.py
+index a5f20c4..3e70a68 100644
+--- a/nova/tests/unit/virt/libvirt/test_driver.py
++++ b/nova/tests/unit/virt/libvirt/test_driver.py
+@@ -11133,18 +11133,18 @@ Active:          8381604 kB
+                                                   dstfile, "qcow2")
+             mock_define.assert_called_once_with(xmldoc)
+ 
+-    @mock.patch.object(greenthread, "spawn")
+-    def test_live_migration_hostname_valid(self, mock_spawn):
++    @mock.patch.object(libvirt_driver.LibvirtDriver, "_live_migration")
++    def test_live_migration_hostname_valid(self, mock_lm):
+         drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), False)
+         drvr.live_migration(self.context, self.test_instance,
+                             "host1.example.com",
+                             lambda x: x,
+                             lambda x: x)
+-        self.assertEqual(1, mock_spawn.call_count)
++        self.assertEqual(1, mock_lm.call_count)
+ 
+-    @mock.patch.object(greenthread, "spawn")
++    @mock.patch.object(libvirt_driver.LibvirtDriver, "_live_migration")
+     @mock.patch.object(fake_libvirt_utils, "is_valid_hostname")
+-    def test_live_migration_hostname_invalid(self, mock_hostname, mock_spawn):
++    def test_live_migration_hostname_invalid(self, mock_hostname, mock_lm):
+         drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), False)
+         mock_hostname.return_value = False
+         self.assertRaises(exception.InvalidHostname,
+diff --git a/nova/virt/libvirt/driver.py b/nova/virt/libvirt/driver.py
+index 9815234..49263fc 100644
+--- a/nova/virt/libvirt/driver.py
++++ b/nova/virt/libvirt/driver.py
+@@ -5410,9 +5410,9 @@ class LibvirtDriver(driver.ComputeDriver):
+         if not libvirt_utils.is_valid_hostname(dest):
+             raise exception.InvalidHostname(hostname=dest)
+ 
+-        greenthread.spawn(self._live_migration, context, instance, dest,
+-                          post_method, recover_method, block_migration,
+-                          migrate_data)
++        self._live_migration(context, instance, dest,
++                             post_method, recover_method, block_migration,
++                             migrate_data)
+ 
+     def _update_xml(self, xml_str, volume, listen_addrs):
+         xml_doc = etree.fromstring(xml_str)

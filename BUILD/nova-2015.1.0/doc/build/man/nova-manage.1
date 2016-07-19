@@ -1,0 +1,277 @@
+.\" Man page generated from reStructuredText.
+.
+.TH "NOVA-MANAGE" "1" "May 16, 2016" "2015.1.0" "nova"
+.SH NAME
+nova-manage \- Cloud controller fabric
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.SH CONTROL AND MANAGE CLOUD COMPUTER INSTANCES AND IMAGES
+.INDENT 0.0
+.TP
+.B Author
+\fI\%openstack@lists.openstack.org\fP
+.TP
+.B Date
+2012\-04\-05
+.TP
+.B Copyright
+OpenStack Foundation
+.TP
+.B Version
+2012.1
+.TP
+.B Manual section
+1
+.TP
+.B Manual group
+cloud computing
+.UNINDENT
+.SS SYNOPSIS
+.INDENT 0.0
+.INDENT 3.5
+nova\-manage <category> <action> [<args>]
+.UNINDENT
+.UNINDENT
+.SS DESCRIPTION
+.sp
+nova\-manage controls cloud computing instances by managing shell selection, vpn connections, and floating IP address configuration. More information about OpenStack Nova is at \fI\%http://nova.openstack.org\fP\&.
+.SS OPTIONS
+.sp
+The standard pattern for executing a nova\-manage command is:
+\fBnova\-manage <category> <command> [<args>]\fP
+.sp
+Run without arguments to see a list of available command categories:
+\fBnova\-manage\fP
+.sp
+Categories are project, shell, vpn, and floating. Detailed descriptions are below.
+.sp
+You can also run with a category argument such as user to see a list of all commands in that category:
+\fBnova\-manage floating\fP
+.sp
+These sections describe the available categories and arguments for nova\-manage.
+.SS Nova Db
+.sp
+\fBnova\-manage db version\fP
+.INDENT 0.0
+.INDENT 3.5
+Print the current main database version.
+.UNINDENT
+.UNINDENT
+.sp
+\fBnova\-manage db sync\fP
+.INDENT 0.0
+.INDENT 3.5
+Sync the main database up to the most recent version. This is the standard way to create the db as well.
+.UNINDENT
+.UNINDENT
+.sp
+\fBnova\-manage db archive_deleted_rows [\-\-max_rows <number>]\fP
+.INDENT 0.0
+.INDENT 3.5
+Move deleted rows from production tables to shadow tables.
+.UNINDENT
+.UNINDENT
+.sp
+\fBnova\-manage db null_instance_uuid_scan [\-\-delete]\fP
+.INDENT 0.0
+.INDENT 3.5
+Lists and optionally deletes database records where instance_uuid is NULL.
+.UNINDENT
+.UNINDENT
+.SS Nova ApiDb
+.sp
+\fBnova\-manage api_db version\fP
+.INDENT 0.0
+.INDENT 3.5
+Print the current cells api database version.
+.UNINDENT
+.UNINDENT
+.sp
+\fBnova\-manage api_db sync\fP
+.INDENT 0.0
+.INDENT 3.5
+Sync the api cells database up to the most recent version. This is the standard way to create the db as well.
+.UNINDENT
+.UNINDENT
+.SS Nova Logs
+.sp
+\fBnova\-manage logs errors\fP
+.INDENT 0.0
+.INDENT 3.5
+Displays nova errors from log files.
+.UNINDENT
+.UNINDENT
+.sp
+\fBnova\-manage logs syslog <number>\fP
+.INDENT 0.0
+.INDENT 3.5
+Displays nova alerts from syslog.
+.UNINDENT
+.UNINDENT
+.SS Nova Shell
+.sp
+\fBnova\-manage shell bpython\fP
+.INDENT 0.0
+.INDENT 3.5
+Starts a new bpython shell.
+.UNINDENT
+.UNINDENT
+.sp
+\fBnova\-manage shell ipython\fP
+.INDENT 0.0
+.INDENT 3.5
+Starts a new ipython shell.
+.UNINDENT
+.UNINDENT
+.sp
+\fBnova\-manage shell python\fP
+.INDENT 0.0
+.INDENT 3.5
+Starts a new python shell.
+.UNINDENT
+.UNINDENT
+.sp
+\fBnova\-manage shell run\fP
+.INDENT 0.0
+.INDENT 3.5
+Starts a new shell using python.
+.UNINDENT
+.UNINDENT
+.sp
+\fBnova\-manage shell script <path/scriptname>\fP
+.INDENT 0.0
+.INDENT 3.5
+Runs the named script from the specified path with flags set.
+.UNINDENT
+.UNINDENT
+.SS Nova VPN
+.sp
+\fBnova\-manage vpn list\fP
+.INDENT 0.0
+.INDENT 3.5
+Displays a list of projects, their IP port numbers, and what state they\(aqre in.
+.UNINDENT
+.UNINDENT
+.sp
+\fBnova\-manage vpn run <projectname>\fP
+.INDENT 0.0
+.INDENT 3.5
+Starts the VPN for the named project.
+.UNINDENT
+.UNINDENT
+.sp
+\fBnova\-manage vpn spawn\fP
+.INDENT 0.0
+.INDENT 3.5
+Runs all VPNs.
+.UNINDENT
+.UNINDENT
+.SS Nova Floating IPs
+.sp
+\fBnova\-manage floating create <ip_range> [\-\-pool <pool>] [\-\-interface <interface>]\fP
+.INDENT 0.0
+.INDENT 3.5
+Creates floating IP addresses for the given range, optionally specifying
+a floating pool and a network interface.
+.UNINDENT
+.UNINDENT
+.sp
+\fBnova\-manage floating delete <ip_range>\fP
+.INDENT 0.0
+.INDENT 3.5
+Deletes floating IP addresses in the range given.
+.UNINDENT
+.UNINDENT
+.sp
+\fBnova\-manage floating list\fP
+.INDENT 0.0
+.INDENT 3.5
+Displays a list of all floating IP addresses.
+.UNINDENT
+.UNINDENT
+.SS Nova Images
+.sp
+\fBnova\-manage image image_register <path> <owner>\fP
+.INDENT 0.0
+.INDENT 3.5
+Registers an image with the image service.
+.UNINDENT
+.UNINDENT
+.sp
+\fBnova\-manage image kernel_register <path> <owner>\fP
+.INDENT 0.0
+.INDENT 3.5
+Registers a kernel with the image service.
+.UNINDENT
+.UNINDENT
+.sp
+\fBnova\-manage image ramdisk_register <path> <owner>\fP
+.INDENT 0.0
+.INDENT 3.5
+Registers a ramdisk with the image service.
+.UNINDENT
+.UNINDENT
+.sp
+\fBnova\-manage image all_register <image_path> <kernel_path> <ramdisk_path> <owner>\fP
+.INDENT 0.0
+.INDENT 3.5
+Registers an image kernel and ramdisk with the image service.
+.UNINDENT
+.UNINDENT
+.sp
+\fBnova\-manage image convert <directory>\fP
+.INDENT 0.0
+.INDENT 3.5
+Converts all images in directory from the old (Bexar) format to the new format.
+.UNINDENT
+.UNINDENT
+.SS Nova VM
+.INDENT 0.0
+.TP
+.B \fBnova\-manage vm list [host]\fP
+Show a list of all instances. Accepts optional hostname (to show only instances on specific host).
+.TP
+.B \fBnova\-manage live\-migration <ec2_id> <destination host name>\fP
+Live migrate instance from current host to destination host. Requires instance id (which comes from euca\-describe\-instance) and destination host name (which can be found from nova\-manage service list).
+.UNINDENT
+.SS SEE ALSO
+.INDENT 0.0
+.IP \(bu 2
+\fI\%OpenStack Nova\fP
+.UNINDENT
+.SS BUGS
+.INDENT 0.0
+.IP \(bu 2
+Nova bugs are managed at Launchpad \fI\%Bugs : Nova\fP
+.UNINDENT
+.SH AUTHOR
+OpenStack
+.SH COPYRIGHT
+2010-present, OpenStack Foundation
+.\" Generated by docutils manpage writer.
+.

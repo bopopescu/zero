@@ -1,0 +1,80 @@
+From bd53eea9f6310d293eb670c182cb000a181efd16 Mon Sep 17 00:00:00 2001
+From: Dmitry Tantsur <dtantsur@redhat.com>
+Date: Mon, 10 Aug 2015 12:47:23 +0200
+Subject: [PATCH] Ironic: Use ironicclient native retries for Conflict in
+ ClientWrapper
+
+Ironic client has its own retries since 0.6, defaulting to 30 seconds.
+As ClientWrapper also has retries (defaulting to 60 retries with
+2 seconds break)), total retry time grows to 32 minutes (30*60+120)
+by default, which is obviously insane.
+
+I've seen this breaking deploy: if due to some race with ironic
+nova will try to set instance_uuid on already active (or deploying)
+node, it will take half an hour to fail, leading to all kind of timeouts.
+
+Change-Id: I5351cfba43bd57957d7f55ef2c95e080b6080f73
+Resolves: rhbz#1250088
+(cherry picked from commit 8982566d056a78658c024c70e48ad25387f3cf5c)
+Reviewed-on: https://code.engineering.redhat.com/gerrit/54864
+Tested-by: RHOS Jenkins <apevec+rhosci@redhat.com>
+Reviewed-by: Lon Hohberger <lhh@redhat.com>
+Reviewed-by: Dan Smith <dansmith@redhat.com>
+---
+ nova/tests/unit/virt/ironic/test_client_wrapper.py | 8 ++++++--
+ nova/virt/ironic/client_wrapper.py                 | 8 ++++++--
+ 2 files changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/nova/tests/unit/virt/ironic/test_client_wrapper.py b/nova/tests/unit/virt/ironic/test_client_wrapper.py
+index b3b55fc..be0f19a 100644
+--- a/nova/tests/unit/virt/ironic/test_client_wrapper.py
++++ b/nova/tests/unit/virt/ironic/test_client_wrapper.py
+@@ -71,7 +71,9 @@ class IronicClientWrapperTestCase(test.NoDBTestCase):
+                     'os_tenant_name': CONF.ironic.admin_tenant_name,
+                     'os_service_type': 'baremetal',
+                     'os_endpoint_type': 'public',
+-                    'ironic_url': CONF.ironic.api_endpoint}
++                    'ironic_url': CONF.ironic.api_endpoint,
++                    'max_retries': CONF.ironic.api_max_retries,
++                    'retry_interval': CONF.ironic.api_retry_interval}
+         mock_ir_cli.assert_called_once_with(CONF.ironic.api_version,
+                                             **expected)
+ 
+@@ -82,7 +84,9 @@ class IronicClientWrapperTestCase(test.NoDBTestCase):
+         # dummy call to have _get_client() called
+         ironicclient.call("node.list")
+         expected = {'os_auth_token': 'fake-token',
+-                    'ironic_url': CONF.ironic.api_endpoint}
++                    'ironic_url': CONF.ironic.api_endpoint,
++                    'max_retries': CONF.ironic.api_max_retries,
++                    'retry_interval': CONF.ironic.api_retry_interval}
+         mock_ir_cli.assert_called_once_with(CONF.ironic.api_version,
+                                             **expected)
+ 
+diff --git a/nova/virt/ironic/client_wrapper.py b/nova/virt/ironic/client_wrapper.py
+index 887de9d..4678862 100644
+--- a/nova/virt/ironic/client_wrapper.py
++++ b/nova/virt/ironic/client_wrapper.py
+@@ -75,6 +75,9 @@ class IronicClientWrapper(object):
+             kwargs = {'os_auth_token': auth_token,
+                       'ironic_url': CONF.ironic.api_endpoint}
+ 
++        # Retries for Conflict exception
++        kwargs['max_retries'] = CONF.ironic.api_max_retries
++        kwargs['retry_interval'] = CONF.ironic.api_retry_interval
+         try:
+             cli = ironic.client.get_client(CONF.ironic.api_version, **kwargs)
+             # Cache the client so we don't have to reconstruct and
+@@ -110,9 +113,10 @@ class IronicClientWrapper(object):
+ 
+         :raises: NovaException if all retries failed.
+         """
++        # TODO(dtantsur): drop these once ironicclient 0.8.0 is out and used in
++        # global-requirements.
+         retry_excs = (ironic.exc.ServiceUnavailable,
+-                      ironic.exc.ConnectionRefused,
+-                      ironic.exc.Conflict)
++                      ironic.exc.ConnectionRefused)
+         num_attempts = CONF.ironic.api_max_retries
+ 
+         for attempt in range(1, num_attempts + 1):

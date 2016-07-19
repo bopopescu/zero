@@ -1,0 +1,51 @@
+From da1a7a08d07ba35b168778b4aa6c435ce8278bc3 Mon Sep 17 00:00:00 2001
+From: Victor Stinner <vstinner@redhat.com>
+Date: Mon, 15 Jun 2015 16:10:45 +0200
+Subject: [PATCH] Support ssh-keygen of OpenSSH 6.8
+
+OpenSSH 6.8 changed the default hash method to SHA256. OpenSSH 6.7 and
+older don't support the -E command line option to specify the hash
+method.
+
+First try without -E since most Linux distribution for OpenStack Kilo
+still use OpenSSH 6.7. If OpenSSH 6.8 and newer is detected (hash method
+specified in the output), call again ssh-keygen with -E md5 to hash the
+fingerprint using MD5.
+
+This change fixes the two following tests on Fedora 22:
+
+* nova.tests.unit.api.ec2.test_cloud.CloudTestCase.test_import_key_pair
+* nova.tests.unit.compute.test_keypairs.ImportKeypairTestCase.test_success_ssh
+
+Closes-bug: #1464298
+Change-Id: I867684c36377e5c1e5ca5d33e3fc2f1795f44e06
+(cherry picked from commit 47f776198c646259b8d4ecc00da2c57ec92e3af6)
+---
+ nova/crypto.py | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/nova/crypto.py b/nova/crypto.py
+index 7194392..83aad6e 100644
+--- a/nova/crypto.py
++++ b/nova/crypto.py
+@@ -127,8 +127,19 @@ def ensure_ca_filesystem():
+ 
+ 
+ def _generate_fingerprint(public_key_file):
+-    (out, err) = utils.execute('ssh-keygen', '-q', '-l', '-f', public_key_file)
++    # NOTE(haypo): OpenSSH 6.7 and older doesn't support the -E option to
++    # specify the hash method. First try without -E since most Linux
++    # distribution for OpenStack Kilo still use OpenSSH 6.7.
++    args = ('ssh-keygen', '-q', '-l', '-f', public_key_file)
++    (out, err) = utils.execute(*args)
+     fingerprint = out.split(' ')[1]
++    if fingerprint.startswith('SHA256:'):
++        # OpenSSH 6.8 and newer uses SHA256 by default: hash the fingerprint
++        # using MD5 for backward compatibility
++        (out, err) = utils.execute(*(args + ('-E', 'md5')))
++        fingerprint = out.split(' ')[1]
++        # strip the hash method ("MD5:" prefix)
++        fingerprint = fingerprint[4:]
+     return fingerprint
+ 
+ 

@@ -1,0 +1,351 @@
+From b980428562993f47c4eac5a4a695abfeb18a7c44 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?P=C3=A1draig=20Brady?= <pbrady@redhat.com>
+Date: Tue, 19 May 2015 17:38:44 +0100
+Subject: [PATCH] support overriding the disk driver IO policy
+
+To manually configure for performance reasons,
+until nova supports this automatically (#865337),
+or until qemu performs adequately in all cases (#1175440)
+
+The new config option is: [workarounds]/rhosp_disk_io_policies
+with values 'native' or 'threads' being configurable of each disk type.
+  E.g.: file=threads,network=native
+Note 'native' is only supported with disk caching modes
+'none' and 'directsync' and will be ignored with a warning
+for other auto selected or configured caching modes.
+
+This is not appropriate for upstream and a variant was
+rejected at https://review.openstack.org/117442
+
+Change-Id: If7e1ad0b883a388c01a87bf3ba5dbd0df2061a1c
+Resolves: rhbz#1222661
+Reviewed-on: https://code.engineering.redhat.com/gerrit/48863
+Tested-by: RHOS Jenkins <apevec+rhosci@redhat.com>
+Reviewed-by: Padraig Brady <pbrady@redhat.com>
+Tested-by: Padraig Brady <pbrady@redhat.com>
+---
+ nova/tests/unit/virt/libvirt/test_config.py | 18 ++++++
+ nova/tests/unit/virt/libvirt/test_driver.py | 86 +++++++++++++++++++++++++----
+ nova/utils.py                               |  7 +++
+ nova/virt/libvirt/config.py                 |  7 ++-
+ nova/virt/libvirt/driver.py                 | 27 +++++++--
+ 5 files changed, 128 insertions(+), 17 deletions(-)
+
+diff --git a/nova/tests/unit/virt/libvirt/test_config.py b/nova/tests/unit/virt/libvirt/test_config.py
+index 2b4f6cc..22fc17d 100644
+--- a/nova/tests/unit/virt/libvirt/test_config.py
++++ b/nova/tests/unit/virt/libvirt/test_config.py
+@@ -814,6 +814,24 @@ class LibvirtConfigGuestDiskTest(LibvirtConfigBaseTest):
+               <blockio logical_block_size="4096" physical_block_size="4096"/>
+             </disk>""", xml)
+ 
++    def test_config_io_policy(self):
++        obj = config.LibvirtConfigGuestDisk()
++        obj.driver_io = 'native'
++        obj.driver_name = 'qemu'
++        obj.driver_format = 'raw'
++        obj.source_type = "file"
++        obj.source_path = "/tmp/hello"
++        obj.target_dev = "/dev/hda"
++        obj.target_bus = "ide"
++
++        xml = obj.to_xml()
++        self.assertXmlEqual("""
++            <disk type="file" device="disk">
++              <driver name="qemu" type="raw" io="native"/>
++              <source file="/tmp/hello"/>
++              <target bus="ide" dev="/dev/hda"/>
++            </disk>""", xml)
++
+ 
+ class LibvirtConfigGuestSnapshotDiskTest(LibvirtConfigBaseTest):
+ 
+diff --git a/nova/tests/unit/virt/libvirt/test_driver.py b/nova/tests/unit/virt/libvirt/test_driver.py
+index db33adb..1f9e651 100644
+--- a/nova/tests/unit/virt/libvirt/test_driver.py
++++ b/nova/tests/unit/virt/libvirt/test_driver.py
+@@ -441,6 +441,7 @@ class FakeConfigGuestDisk(object):
+ class FakeConfigGuest(object):
+     def __init__(self, *args, **kwargs):
+         self.driver_cache = None
++        self.driver_io = None
+ 
+ 
+ class FakeNodeDevice(object):
+@@ -2086,6 +2087,66 @@ class LibvirtConnTestCase(test.NoDBTestCase):
+             self.assertEqual(cfg.devices[2].target_dev, 'vdd')
+             mock_save.assert_called_with()
+ 
++    def _do_test_get_guest_config_with_io_policy(
++        self, policies, cachemodes, expected_file, expected_volume):
++        if policies:
++            self.flags(rhosp_disk_io_policies=policies, group='workarounds')
++        if cachemodes:
++            self.flags(disk_cachemodes=cachemodes, group='libvirt')
++
++        conn = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
++
++        instance_ref = objects.Instance(**self.test_instance)
++        image_meta = {}
++
++        conn_info = {'driver_volume_type': 'fake'}
++        info = {'block_device_mapping': driver_block_device.convert_volumes([
++                    fake_block_device.FakeDbBlockDeviceDict(
++                        {'id': 1,
++                         'source_type': 'volume', 'destination_type': 'volume',
++                         'device_name': '/dev/vdc'}),
++                ])}
++        info['block_device_mapping'][0]['connection_info'] = conn_info
++        info['block_device_mapping'][0]['mount_device'] = '/dev/vdc'
++
++        with mock.patch.object(
++                driver_block_device.DriverVolumeBlockDevice, 'save'):
++
++            disk_info = blockinfo.get_disk_info(CONF.libvirt.virt_type,
++                                                instance_ref,
++                                                image_meta,
++                                                info)
++
++            cfg = conn._get_guest_config(instance_ref, [], {}, disk_info,
++                                         None, info)
++
++            self.assertIsInstance(cfg.devices[0],
++                                  vconfig.LibvirtConfigGuestDisk)
++            self.assertIsInstance(cfg.devices[1],
++                                  vconfig.LibvirtConfigGuestDisk)
++            self.assertIsInstance(cfg.devices[2],
++                                  vconfig.LibvirtConfigGuestDisk)
++            self.assertEqual(expected_file, cfg.devices[0].driver_io)
++            self.assertEqual(expected_file, cfg.devices[1].driver_io)
++            self.assertEqual(expected_volume, cfg.devices[2].driver_io)
++
++    def test_get_guest_config_with_io_policy_default(self):
++        self._do_test_get_guest_config_with_io_policy(None, None, None, None)
++
++    def test_get_guest_config_with_io_policy_local(self):
++        self._do_test_get_guest_config_with_io_policy(
++            ['file=native'], ['file=none'], 'native', None)
++
++    def test_get_guest_config_with_io_policy_ignored(self):
++        self._do_test_get_guest_config_with_io_policy(
++            ['file=native'], ['file=writethrough'], None, None)
++
++    def test_get_guest_config_with_io_policy_mix(self):
++        self._do_test_get_guest_config_with_io_policy(
++            ['file=threads', 'network=native'],
++            ['file=none', 'network=none'],
++            'threads', 'native')
++
+     def test_get_guest_config_with_configdrive(self):
+         # It's necessary to check if the architecture is power, because
+         # power doesn't have support to ide, and so libvirt translate
+@@ -4510,9 +4571,9 @@ class LibvirtConnTestCase(test.NoDBTestCase):
+             mock.patch.object(drvr, '_connect_volume'),
+             mock.patch.object(drvr, '_get_volume_config',
+                               return_value=mock_conf),
+-            mock.patch.object(drvr, '_set_cache_mode')
++            mock.patch.object(drvr, '_set_disk_driver_options')
+         ) as (mock_connect_volume, mock_get_volume_config,
+-              mock_set_cache_mode):
++              mock_set_disk_driver_options):
+             for state in (power_state.RUNNING, power_state.PAUSED):
+                 mock_dom.info.return_value = [state, 512, 512, 2, 1234, 5678]
+ 
+@@ -4527,7 +4588,7 @@ class LibvirtConnTestCase(test.NoDBTestCase):
+                     connection_info, disk_info)
+                 mock_get_volume_config.assert_called_with(
+                     connection_info, disk_info)
+-                mock_set_cache_mode.assert_called_with(mock_conf)
++                mock_set_disk_driver_options.assert_called_with(mock_conf)
+                 mock_dom.attachDeviceFlags.assert_called_with(
+                     mock_conf.to_xml(), flags)
+ 
+@@ -9782,31 +9843,31 @@ Active:          8381604 kB
+         got = drvr._get_instance_capabilities()
+         self.assertEqual(want, got)
+ 
+-    def test_set_cache_mode(self):
++    def test_set_disk_driver_options(self):
+         self.flags(disk_cachemodes=['file=directsync'], group='libvirt')
+         drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+         fake_conf = FakeConfigGuestDisk()
+ 
+         fake_conf.source_type = 'file'
+-        drvr._set_cache_mode(fake_conf)
++        drvr._set_disk_driver_options(fake_conf)
+         self.assertEqual(fake_conf.driver_cache, 'directsync')
+ 
+-    def test_set_cache_mode_invalid_mode(self):
++    def test_set_disk_driver_options_invalid_mode(self):
+         self.flags(disk_cachemodes=['file=FAKE'], group='libvirt')
+         drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+         fake_conf = FakeConfigGuestDisk()
+ 
+         fake_conf.source_type = 'file'
+-        drvr._set_cache_mode(fake_conf)
++        drvr._set_disk_driver_options(fake_conf)
+         self.assertIsNone(fake_conf.driver_cache)
+ 
+-    def test_set_cache_mode_invalid_object(self):
++    def test_set_disk_driver_options_invalid_object(self):
+         self.flags(disk_cachemodes=['file=directsync'], group='libvirt')
+         drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+         fake_conf = FakeConfigGuest()
+ 
+         fake_conf.driver_cache = 'fake'
+-        drvr._set_cache_mode(fake_conf)
++        drvr._set_disk_driver_options(fake_conf)
+         self.assertEqual(fake_conf.driver_cache, 'fake')
+ 
+     def _test_shared_storage_detection(self, is_same):
+@@ -10693,8 +10754,9 @@ Active:          8381604 kB
+             mock.patch.object(drvr, '_connect_volume'),
+             mock.patch.object(drvr, '_get_volume_config',
+                               return_value=mock_conf),
+-            mock.patch.object(drvr, '_set_cache_mode')
+-        ) as (volume_save, connect_volume, get_volume_config, set_cache_mode):
++            mock.patch.object(drvr, '_set_disk_driver_options')
++        ) as (volume_save, connect_volume, get_volume_config,
++              set_disk_driver_options):
+             devices = drvr._get_guest_storage_config(instance, None,
+                 disk_info, False, bdi, flavor, "hvm")
+ 
+@@ -10706,7 +10768,7 @@ Active:          8381604 kB
+             get_volume_config.assert_called_with(bdm['connection_info'],
+                 {'bus': 'virtio', 'type': 'disk', 'dev': 'vdc'})
+             volume_save.assert_called_once_with()
+-            self.assertEqual(3, set_cache_mode.call_count)
++            self.assertEqual(3, set_disk_driver_options.call_count)
+ 
+     def test_get_neutron_events(self):
+         drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), False)
+diff --git a/nova/utils.py b/nova/utils.py
+index 7212eca..374e0e7 100644
+--- a/nova/utils.py
++++ b/nova/utils.py
+@@ -111,6 +111,13 @@ workarounds_opts = [
+                      'they have previously been evacuated. This can result in '
+                       'data loss if undesired. See '
+                       'https://launchpad.net/bugs/1419785'),
++    cfg.ListOpt('rhosp_disk_io_policies',
++                default=[],
++                help='Specific IO policies to use for different disk types '
++                     'e.g: file=threads,network=native.  '
++                     'This should not be required when nova auto selects the '
++                     'most appropriate (http://bugzilla.redhat.com/865337), '
++                     'or likewise qemu (http://bugzilla.redhat.com/1175440)'),
+     ]
+ CONF = cfg.CONF
+ CONF.register_opts(monkey_patch_opts)
+diff --git a/nova/virt/libvirt/config.py b/nova/virt/libvirt/config.py
+index d48abdc..10678c5 100644
+--- a/nova/virt/libvirt/config.py
++++ b/nova/virt/libvirt/config.py
+@@ -702,6 +702,7 @@ class LibvirtConfigGuestDisk(LibvirtConfigGuestDevice):
+         self.driver_format = None
+         self.driver_cache = None
+         self.driver_discard = None
++        self.driver_io = None
+         self.source_path = None
+         self.source_protocol = None
+         self.source_name = None
+@@ -734,7 +735,8 @@ class LibvirtConfigGuestDisk(LibvirtConfigGuestDevice):
+         if (self.driver_name is not None or
+             self.driver_format is not None or
+             self.driver_cache is not None or
+-                self.driver_discard is not None):
++            self.driver_discard is not None or
++            self.driver_io is not None):
+             drv = etree.Element("driver")
+             if self.driver_name is not None:
+                 drv.set("name", self.driver_name)
+@@ -744,6 +746,8 @@ class LibvirtConfigGuestDisk(LibvirtConfigGuestDevice):
+                 drv.set("cache", self.driver_cache)
+             if self.driver_discard is not None:
+                 drv.set("discard", self.driver_discard)
++            if self.driver_io is not None:
++                drv.set("io", self.driver_io)
+             dev.append(drv)
+ 
+         if self.source_type == "file":
+@@ -839,6 +843,7 @@ class LibvirtConfigGuestDisk(LibvirtConfigGuestDevice):
+                 self.driver_format = c.get('type')
+                 self.driver_cache = c.get('cache')
+                 self.driver_discard = c.get('discard')
++                self.driver_io = c.get('io')
+             elif c.tag == 'source':
+                 if self.source_type == 'file':
+                     self.source_path = c.get('file')
+diff --git a/nova/virt/libvirt/driver.py b/nova/virt/libvirt/driver.py
+index 136fec8..a40e65e 100644
+--- a/nova/virt/libvirt/driver.py
++++ b/nova/virt/libvirt/driver.py
+@@ -417,6 +417,7 @@ class LibvirtDriver(driver.ComputeDriver):
+         self.image_backend = imagebackend.Backend(CONF.use_cow_images)
+ 
+         self.disk_cachemodes = {}
++        self.disk_io_policies = {}
+ 
+         self.valid_cachemodes = ["default",
+                                  "none",
+@@ -437,6 +438,17 @@ class LibvirtDriver(driver.ComputeDriver):
+                 continue
+             self.disk_cachemodes[disk_type] = cache_mode
+ 
++        self.valid_io_policies = ["native", "threads"]
++
++        for io_policy_str in CONF.workarounds.rhosp_disk_io_policies:
++            disk_type, io_policy = io_policy_str.split('=', 1)
++            if io_policy not in self.valid_io_policies:
++                LOG.warning(_LW('Invalid IO policy %(io_policy)s specified '
++                                'for disk type %(disk_type)s.'),
++                            {'io_policy': io_policy, 'disk_type': disk_type})
++                continue
++            self.disk_io_policies[disk_type] = io_policy
++
+         self._volume_api = volume.API()
+         self._image_api = image.API()
+         self._events_delayed = {}
+@@ -484,8 +496,8 @@ class LibvirtDriver(driver.ComputeDriver):
+                 self._disk_cachemode = "writethrough"
+         return self._disk_cachemode
+ 
+-    def _set_cache_mode(self, conf):
+-        """Set cache mode on LibvirtConfigGuestDisk object."""
++    def _set_disk_driver_options(self, conf):
++        """Override driver options on LibvirtConfigGuestDisk object."""
+         try:
+             source_type = conf.source_type
+             driver_cache = conf.driver_cache
+@@ -496,6 +508,13 @@ class LibvirtDriver(driver.ComputeDriver):
+                                               driver_cache)
+         conf.driver_cache = cache_mode
+ 
++        io_policy = self.disk_io_policies.get(source_type, None)
++        if io_policy == 'native' and cache_mode not in ('none', 'directsync'):
++            LOG.warning(_LW("Ignoring IO policy 'native' with cache mode "
++                            "'%(cm)s'."), {'cm': cache_mode})
++            io_policy = None
++        conf.driver_io = io_policy
++
+     def _do_quality_warnings(self):
+         """Warn about untested driver configurations.
+ 
+@@ -1036,7 +1055,7 @@ class LibvirtDriver(driver.ComputeDriver):
+                                                 image_meta, bdm)
+         self._connect_volume(connection_info, disk_info)
+         conf = self._get_volume_config(connection_info, disk_info)
+-        self._set_cache_mode(conf)
++        self._set_disk_driver_options(conf)
+ 
+         try:
+             # NOTE(vish): We can always affect config because our
+@@ -3273,7 +3292,7 @@ class LibvirtDriver(driver.ComputeDriver):
+             vol.save()
+ 
+         for d in devices:
+-            self._set_cache_mode(d)
++            self._set_disk_driver_options(d)
+ 
+         if (image_meta and
+                 image_meta.get('properties', {}).get('hw_scsi_model')):

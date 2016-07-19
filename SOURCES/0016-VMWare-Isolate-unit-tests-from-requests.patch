@@ -1,0 +1,84 @@
+From 4f7ddbb9d95eeabd270a681041410fbd23527fc3 Mon Sep 17 00:00:00 2001
+From: Sean Dague <sean@dague.net>
+Date: Mon, 4 May 2015 07:14:10 -0400
+Subject: [PATCH] VMWare: Isolate unit tests from requests
+
+The test_ipv6_host_read actually tested all the way down to the
+requests url call, which means it's testing a lot of function
+unrelated to the nova code. The interesting part of this test seems to
+be that it builds the ipv6 url correctly.
+
+Change this into an assert based on that url being correct. We still
+need to mock out the http connection because that's done magically in
+__init__.
+
+Unblocks nova patches, which are failing on unit test since the latest
+requests release and one of the function signatures changing.
+
+(cherry picked from commit 117351d6c46bd6d00cc92fcd234d67a913833cbc)
+Conflicts:
+  nova/tests/unit/virt/vmwareapi/test_read_write_util.py
+  Import module urlib and use the test from libvrty
+
+Change-Id: I8ae4cb00e63cbb0304210dba2cd4993016d852ba
+Closes-bug: #1451389
+---
+ .../unit/virt/vmwareapi/test_read_write_util.py    | 36 +++++++++++-----------
+ 1 file changed, 18 insertions(+), 18 deletions(-)
+
+diff --git a/nova/tests/unit/virt/vmwareapi/test_read_write_util.py b/nova/tests/unit/virt/vmwareapi/test_read_write_util.py
+index 7ee8ed4..74541c0 100644
+--- a/nova/tests/unit/virt/vmwareapi/test_read_write_util.py
++++ b/nova/tests/unit/virt/vmwareapi/test_read_write_util.py
+@@ -13,9 +13,10 @@
+ #    License for the specific language governing permissions and limitations
+ #    under the License.
+ 
++import urllib
++
+ import mock
+ from oslo_config import cfg
+-import requests
+ 
+ from nova import test
+ from nova.virt.vmwareapi import read_write_util
+@@ -25,23 +26,22 @@ CONF = cfg.CONF
+ 
+ class ReadWriteUtilTestCase(test.NoDBTestCase):
+ 
+-    @mock.patch.object(requests.api, 'request')
+-    def test_ipv6_host_read(self, mock_request):
++    def test_ipv6_host_read(self):
+         ipv6_host = 'fd8c:215d:178e:c51e:200:c9ff:fed1:584c'
+         port = 7443
+         folder = 'tmp/fake.txt'
+-        read_write_util.VMwareHTTPReadFile(ipv6_host,
+-                                           port,
+-                                           'fake_dc',
+-                                           'fake_ds',
+-                                           dict(),
+-                                           folder)
+-        base_url = 'https://[%s]:%s/folder/%s' % (ipv6_host, port, folder)
+-        base_url += '?dsName=fake_ds&dcPath=fake_dc'
+-        headers = {'User-Agent': 'OpenStack-ESX-Adapter'}
+-        mock_request.assert_called_once_with('get',
+-                                             base_url,
+-                                             headers=headers,
+-                                             allow_redirects=True,
+-                                             stream=True,
+-                                             verify=False)
++        # NOTE(sdague): the VMwareHTTPReadFile makes implicit http
++        # call via requests during construction, block that from
++        # happening here in the test.
++        with mock.patch.object(read_write_util.VMwareHTTPReadFile,
++                               '_create_read_connection'):
++            reader = read_write_util.VMwareHTTPReadFile(ipv6_host,
++                                                        port,
++                                                        'fake_dc',
++                                                        'fake_ds',
++                                                        dict(),
++                                                        folder)
++            param_list = {"dcPath": 'fake_dc', "dsName": 'fake_ds'}
++            base_url = 'https://[%s]:%s/folder/%s' % (ipv6_host, port, folder)
++            base_url += '?' + urllib.urlencode(param_list)
++            self.assertEqual(base_url, reader._base_url)

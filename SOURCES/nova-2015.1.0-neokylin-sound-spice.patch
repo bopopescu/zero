@@ -1,0 +1,48 @@
+diff -aruN nova-2015.1.0.org/nova/virt/libvirt/config.py nova-2015.1.0/nova/virt/libvirt/config.py
+--- nova-2015.1.0.org/nova/virt/libvirt/config.py	2015-10-29 15:01:39.819057624 +0800
++++ nova-2015.1.0/nova/virt/libvirt/config.py	2015-10-29 15:03:36.093143274 +0800
+@@ -1329,7 +1329,14 @@
+ 
+         return dev
+ 
+-
++class LibvirtConfigGuestSound(LibvirtConfigGuestDevice): #wz
++    def __init__(self, **kwargs):
++        super(LibvirtConfigGuestSound, self).__init__(root_name="sound",**kwargs)
++        self.type = "ich6" 
++    def format_dom(self):
++        dev = super(LibvirtConfigGuestSound, self).format_dom()
++        dev.set("model", self.type)
++        return dev
+ class LibvirtConfigMemoryBalloon(LibvirtConfigGuestDevice):
+     def __init__(self, **kwargs):
+         super(LibvirtConfigMemoryBalloon, self).__init__(
+@@ -1426,13 +1433,14 @@
+                         self.slot = sub.get('slot')
+                         self.function = sub.get('function')
+ 
++#class LibvirtConfigGuestCharBase(LibvirtConfigGuestDevice):
+ 
+ class LibvirtConfigGuestCharBase(LibvirtConfigGuestDevice):
+ 
+     def __init__(self, **kwargs):
+         super(LibvirtConfigGuestCharBase, self).__init__(**kwargs)
+ 
+-        self.type = "pty"
++        self.type = "spicevmc"
+         self.source_path = None
+         self.listen_port = None
+         self.listen_host = None
+diff -aruN nova-2015.1.0.org/nova/virt/libvirt/driver.py nova-2015.1.0/nova/virt/libvirt/driver.py
+--- nova-2015.1.0.org/nova/virt/libvirt/driver.py	2015-10-29 15:01:39.819057624 +0800
++++ nova-2015.1.0/nova/virt/libvirt/driver.py	2015-10-29 15:03:25.752317678 +0800
+@@ -3889,6 +3889,9 @@
+         if max_vram and video_ram:
+             video.vram = video_ram * units.Mi / units.Ki
+         guest.add_device(video)
++        sound = vconfig.LibvirtConfigGuestSound()
++        guest.add_device(sound)	
++
+ 
+     def _add_qga_device(self, guest, instance):
+         qga = vconfig.LibvirtConfigGuestChannel()

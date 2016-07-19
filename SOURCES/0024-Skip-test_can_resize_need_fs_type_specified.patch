@@ -1,0 +1,38 @@
+From 41da97d407a10ad7a217423e34c51d78ae57a116 Mon Sep 17 00:00:00 2001
+From: Matthew Booth <mbooth@redhat.com>
+Date: Fri, 17 Jul 2015 11:38:16 +0100
+Subject: [PATCH] Skip test_can_resize_need_fs_type_specified
+
+The above test is passing a tempfile.NamedTemporaryFile object where
+a path is expected. This currently works only coincidentally, because
+the vfs falls back to localfs when libguestfs isn't available, and the
+value is never actually used. However, it fails when libguestfs is
+available in the unit test environment, because libguestfs checks the
+types of its arguments.
+
+Related: rhbz#1244267
+
+Change-Id: Iea58a34f41704680e0cb2e57b6bd6b349761a813
+---
+ nova/tests/unit/virt/disk/test_api.py | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/nova/tests/unit/virt/disk/test_api.py b/nova/tests/unit/virt/disk/test_api.py
+index 1421a1f..789ab53 100644
+--- a/nova/tests/unit/virt/disk/test_api.py
++++ b/nova/tests/unit/virt/disk/test_api.py
+@@ -41,6 +41,14 @@ class FakeMount(object):
+ 
+ class APITestCase(test.NoDBTestCase):
+     def test_can_resize_need_fs_type_specified(self):
++        # Downstream-only skip
++        # This test fails when libguestfs is available in the unit test
++        # environment.
++        # This can be trivially made to pass by passing imgfile.name instead of
++        # imgfile to api.is_image_extendable. However, it needs a significant
++        # rework to be meaningful. We're skipping it for the moment.
++        self.skipTest("Fails when libguestfs is available")
++
+         # NOTE(mikal): Bug 1094373 saw a regression where we failed to
+         # treat a failure to mount as a failure to be able to resize the
+         # filesystem

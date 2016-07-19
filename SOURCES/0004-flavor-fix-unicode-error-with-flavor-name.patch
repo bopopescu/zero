@@ -1,0 +1,51 @@
+From 1dc21dff281cc49c04166ab7b8cb5f8eb28a2170 Mon Sep 17 00:00:00 2001
+From: Sahid Orentino Ferdjaoui <sahid.ferdjaoui@redhat.com>
+Date: Thu, 8 Jan 2015 16:37:08 +0100
+Subject: [PATCH] flavor: fix unicode error with flavor name
+
+Fixes a unicode error when using a name with multibyte characters. This
+fix is targeted to be used only downstream since that part of code has
+been refactored in Kilo to use objects.Flavor
+
+(cherry picked from commit b311692daf65462cebd4e84f5813ab977f30d8c9)
+
+Resolves: rhbz #1177298
+Change-Id: I918c5a49a5e45e981e1fcf8af53ae67d2f8e765d
+Reviewed-on: https://code.engineering.redhat.com/gerrit/40459
+Reviewed-by: Padraig Brady <pbrady@redhat.com>
+Tested-by: Padraig Brady <pbrady@redhat.com>
+---
+ nova/compute/flavors.py         | 2 +-
+ nova/tests/unit/test_flavors.py | 2 ++
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/nova/compute/flavors.py b/nova/compute/flavors.py
+index 45dce39..abfd02c 100644
+--- a/nova/compute/flavors.py
++++ b/nova/compute/flavors.py
+@@ -73,7 +73,7 @@ def _int_or_none(val):
+ 
+ system_metadata_flavor_props = {
+     'id': int,
+-    'name': str,
++    'name': six.text_type,
+     'memory_mb': int,
+     'vcpus': int,
+     'root_gb': int,
+diff --git a/nova/tests/unit/test_flavors.py b/nova/tests/unit/test_flavors.py
+index bc01d41..1741314 100644
+--- a/nova/tests/unit/test_flavors.py
++++ b/nova/tests/unit/test_flavors.py
+@@ -1,3 +1,4 @@
++# -*- coding: utf-8 -*-
+ # Copyright 2011 Ken Pepple
+ #    Licensed under the Apache License, Version 2.0 (the "License"); you may
+ #    not use this file except in compliance with the License. You may obtain
+@@ -261,6 +262,7 @@ class InstanceTypeToolsTest(test.TestCase):
+ 
+     def _test_extract_flavor(self, prefix):
+         instance_type = flavors.get_default_flavor()
++        instance_type['name'] = u'm1.hérisson'
+         instance_type_p = obj_base.obj_to_primitive(instance_type)
+ 
+         metadata = {}

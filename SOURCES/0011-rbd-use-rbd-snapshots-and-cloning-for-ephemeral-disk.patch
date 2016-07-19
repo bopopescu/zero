@@ -1,0 +1,320 @@
+From c3c3929fcbcd90610e7ed58cc87fbcbbf2431d2f Mon Sep 17 00:00:00 2001
+From: Josh Durgin <josh.durgin@inktank.com>
+Date: Thu, 9 Oct 2014 15:31:53 -0700
+Subject: [PATCH] rbd: use rbd snapshots and cloning for ephemeral disk
+ snapshots
+
+When rbd is used for ephemeral disks and image storage, we can avoid
+local disk by doing the snapshot with ceph, and sending the location
+of it to glance.
+
+At this point glance is effectively the owner of the snapshot, and
+nova cannot delete the original disk, so a corresponding change to
+glance is needed to handle this cleanup later, when the snapshot is
+deleted.
+
+To accomplish this, create an rbd clone and store the clone's location
+in glance, and when nova deletes an rbd disk with snapshots, rename
+the disk to include a marker that glance looks for to know they can be
+deleted when glance deletes the snapshots.
+
+This requires changing the typical permissions for the glance ceph
+user to allow writing to the pool where vm images are stored.
+
+Upstream-Liberty: http://review.openstack.org/125963
+Resolves rhbz: 1217885
+Change-Id: Ie03c16fb812f6fd40ebadab65da23c777d7a986b
+Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+Reviewed-on: https://code.engineering.redhat.com/gerrit/47399
+Tested-by: RHOS Jenkins <apevec+rhosci@redhat.com>
+---
+ nova/tests/unit/virt/libvirt/test_rbd.py | 11 ++---
+ nova/virt/libvirt/driver.py              | 72 +++++++++++++++++++++++++-------
+ nova/virt/libvirt/imagebackend.py        | 36 ++++++++++++++++
+ nova/virt/libvirt/rbd_utils.py           | 44 +++++++++++++++++--
+ 4 files changed, 138 insertions(+), 25 deletions(-)
+
+diff --git a/nova/tests/unit/virt/libvirt/test_rbd.py b/nova/tests/unit/virt/libvirt/test_rbd.py
+index 4e74f11..2fb005a 100644
+--- a/nova/tests/unit/virt/libvirt/test_rbd.py
++++ b/nova/tests/unit/virt/libvirt/test_rbd.py
+@@ -102,7 +102,7 @@ class RbdTestCase(test.NoDBTestCase):
+             self.assertFalse(self.driver.is_cloneable({'url': loc},
+                                                       {'disk_format': 'raw'}))
+ 
+-    @mock.patch.object(rbd_utils.RBDDriver, '_get_fsid')
++    @mock.patch.object(rbd_utils.RBDDriver, 'get_fsid')
+     @mock.patch.object(rbd_utils, 'rbd')
+     @mock.patch.object(rbd_utils, 'rados')
+     def test_cloneable(self, mock_rados, mock_rbd, mock_get_fsid):
+@@ -112,7 +112,7 @@ class RbdTestCase(test.NoDBTestCase):
+         self.assertTrue(self.driver.is_cloneable(location, info))
+         self.assertTrue(mock_get_fsid.called)
+ 
+-    @mock.patch.object(rbd_utils.RBDDriver, '_get_fsid')
++    @mock.patch.object(rbd_utils.RBDDriver, 'get_fsid')
+     def test_uncloneable_different_fsid(self, mock_get_fsid):
+         mock_get_fsid.return_value = 'abc'
+         location = {'url': 'rbd://def/pool/image/snap'}
+@@ -120,7 +120,7 @@ class RbdTestCase(test.NoDBTestCase):
+             self.driver.is_cloneable(location, {'disk_format': 'raw'}))
+         self.assertTrue(mock_get_fsid.called)
+ 
+-    @mock.patch.object(rbd_utils.RBDDriver, '_get_fsid')
++    @mock.patch.object(rbd_utils.RBDDriver, 'get_fsid')
+     @mock.patch.object(rbd_utils, 'RBDVolumeProxy')
+     @mock.patch.object(rbd_utils, 'rbd')
+     @mock.patch.object(rbd_utils, 'rados')
+@@ -137,7 +137,7 @@ class RbdTestCase(test.NoDBTestCase):
+                                            snapshot='snap', read_only=True)
+         self.assertTrue(mock_get_fsid.called)
+ 
+-    @mock.patch.object(rbd_utils.RBDDriver, '_get_fsid')
++    @mock.patch.object(rbd_utils.RBDDriver, 'get_fsid')
+     def test_uncloneable_bad_format(self, mock_get_fsid):
+         mock_get_fsid.return_value = 'abc'
+         location = {'url': 'rbd://abc/pool/image/snap'}
+@@ -305,9 +305,6 @@ class RbdTestCase(test.NoDBTestCase):
+     def test_cleanup_volumes_fail_not_found(self):
+         self._test_cleanup_exception('ImageBusy')
+ 
+-    def test_cleanup_volumes_fail_snapshots(self):
+-        self._test_cleanup_exception('ImageHasSnapshots')
+-
+     def test_cleanup_volumes_fail_other(self):
+         self.assertRaises(test.TestingException,
+                           self._test_cleanup_exception, 'DoesNotExist')
+diff --git a/nova/virt/libvirt/driver.py b/nova/virt/libvirt/driver.py
+index fe2c7a8..136fec8 100644
+--- a/nova/virt/libvirt/driver.py
++++ b/nova/virt/libvirt/driver.py
+@@ -1370,6 +1370,61 @@ class LibvirtDriver(driver.ComputeDriver):
+                      instance=instance)
+ 
+         update_task_state(task_state=task_states.IMAGE_PENDING_UPLOAD)
++
++        try:
++            url = snapshot_backend.direct_snapshot(snapshot_name,
++                                                   image_format,
++                                                   image_id)
++            metadata['location'] = url
++            try:
++                self._image_api.update(context,
++                                       image_id,
++                                       metadata)
++            except Exception as e:
++                metadata.pop('location')
++                reason = _('failed to update glance: %s') % e
++                raise exception.ImageUnacceptable(image_id=image_id,
++                                                  reason=reason)
++            update_task_state(task_state=task_states.IMAGE_UPLOADING,
++                     expected_state=task_states.IMAGE_PENDING_UPLOAD)
++            LOG.debug("Snapshot image upload complete", instance=instance)
++            self._snapshot_domain(context, live_snapshot, virt_dom, state,
++                                  instance)
++        except exception.ImageUnacceptable as e:
++            LOG.warn(_LW("Performing standard snapshot because "
++                         "direct snapshot failed: %(error)s"), {'error': e})
++            self._generic_snapshot(context, snapshot_name,
++                                   snapshot_backend,
++                                   disk_path,
++                                   live_snapshot,
++                                   virt_dom,
++                                   state,
++                                   image_format,
++                                   base,
++                                   instance,
++                                   image_id,
++                                   metadata,
++                                   update_task_state)
++
++    def _snapshot_domain(self, context, live_snapshot, virt_dom, state, instance):
++        new_dom = None
++        # NOTE(dkang): because previous managedSave is not called
++        #              for LXC, _create_domain must not be called.
++        if CONF.libvirt.virt_type != 'lxc' and not live_snapshot:
++            if state == power_state.RUNNING:
++                new_dom = self._create_domain(domain=virt_dom)
++            elif state == power_state.PAUSED:
++                new_dom = self._create_domain(domain=virt_dom,
++                        launch_flags=libvirt.VIR_DOMAIN_START_PAUSED)
++            if new_dom is not None:
++                self._attach_pci_devices(new_dom,
++                    pci_manager.get_instance_pci_devs(instance))
++                self._attach_sriov_ports(context, instance, new_dom)
++
++    def _generic_snapshot(self, context, snapshot_name, snapshot_backend,
++                          disk_path, live_snapshot, virt_dom, state,
++                          image_format, image_meta, instance, image_id,
++                          metadata, update_task_state):
+         snapshot_directory = CONF.libvirt.snapshots_directory
+         fileutils.ensure_tree(snapshot_directory)
+         with utils.tempdir(dir=snapshot_directory) as tmpdir:
+@@ -1379,23 +1434,12 @@ class LibvirtDriver(driver.ComputeDriver):
+                     # NOTE(xqueralt): libvirt needs o+x in the temp directory
+                     os.chmod(tmpdir, 0o701)
+                     self._live_snapshot(context, instance, virt_dom, disk_path,
+-                                        out_path, image_format, base)
++                                        out_path, image_format, image_meta)
+                 else:
+                     snapshot_backend.snapshot_extract(out_path, image_format)
+             finally:
+-                new_dom = None
+-                # NOTE(dkang): because previous managedSave is not called
+-                #              for LXC, _create_domain must not be called.
+-                if CONF.libvirt.virt_type != 'lxc' and not live_snapshot:
+-                    if state == power_state.RUNNING:
+-                        new_dom = self._create_domain(domain=virt_dom)
+-                    elif state == power_state.PAUSED:
+-                        new_dom = self._create_domain(domain=virt_dom,
+-                                launch_flags=libvirt.VIR_DOMAIN_START_PAUSED)
+-                    if new_dom is not None:
+-                        self._attach_pci_devices(new_dom,
+-                            pci_manager.get_instance_pci_devs(instance))
+-                        self._attach_sriov_ports(context, instance, new_dom)
++                self._snapshot_domain(context, live_snapshot, virt_dom, state,
++                                      instance)
+                 LOG.info(_LI("Snapshot extracted, beginning image upload"),
+                          instance=instance)
+ 
+diff --git a/nova/virt/libvirt/imagebackend.py b/nova/virt/libvirt/imagebackend.py
+index 91f9282..e9379e3 100644
+--- a/nova/virt/libvirt/imagebackend.py
++++ b/nova/virt/libvirt/imagebackend.py
+@@ -393,6 +393,16 @@ class Image(object):
+         # we should talk about if we want this functionality for everything.
+         pass
+ 
++    def direct_snapshot(self, snapshot_name, image_format, image_id):
++        """Prepare a snapshot for direct reference from glance
++
++        :raises: exception.ImageUnacceptable if it cannot be
++                 referenced directly in the specified image format
++        :returns: URL to be given to glance
++        """
++        reason = _('direct_snapshot() is not implemented')
++        raise exception.ImageUnacceptable(image_id=image_id, reason=reason)
++
+ 
+ class Raw(Image):
+     def __init__(self, instance=None, disk_name=None, path=None):
+@@ -791,6 +801,32 @@ class Rbd(Image):
+             self.driver.remove_image(name)
+         self.driver.import_image(local_file, name)
+ 
++    def direct_snapshot(self, snapshot_name, image_format, image_id):
++        deletion_marker = '_to_be_deleted_by_glance'
++        if image_format != 'raw':
++            reason = _('only raw format is supported')
++            raise exception.ImageUnacceptable(image_id=image_id, reason=reason)
++        if not self.driver.supports_layering():
++            reason = _('librbd is too old')
++            raise exception.ImageUnacceptable(image_id=image_id, reason=reason)
++        rbd_snap_name = snapshot_name + deletion_marker
++        self.driver.create_snapshot(self.rbd_name, rbd_snap_name)
++        fsid = self.driver.get_fsid()
++        location = {'url' : 'rbd://{fsid}/{pool}/{image}/{snap}'.format(
++            fsid=fsid,
++            pool=self.pool,
++            image=self.rbd_name,
++            snap=rbd_snap_name)}
++        clone_name = self.rbd_name + '_clone_' + snapshot_name
++        clone_snap = 'snap'
++        self.driver.clone(location, clone_name)
++        self.driver.create_snapshot(clone_name, clone_snap)
++        return 'rbd://{fsid}/{pool}/{image}/{snap}'.format(
++            fsid=fsid,
++            pool=self.pool,
++            image=clone_name,
++            snap=clone_snap)
++
+ 
+ class Ploop(Image):
+     def __init__(self, instance=None, disk_name=None, path=None):
+diff --git a/nova/virt/libvirt/rbd_utils.py b/nova/virt/libvirt/rbd_utils.py
+index 99ba38a..1f5babc 100644
+--- a/nova/virt/libvirt/rbd_utils.py
++++ b/nova/virt/libvirt/rbd_utils.py
+@@ -169,7 +169,7 @@ class RBDDriver(object):
+             raise exception.ImageUnacceptable(image_id=url, reason=reason)
+         return pieces
+ 
+-    def _get_fsid(self):
++    def get_fsid(self):
+         with RADOSClient(self) as client:
+             return client.cluster.get_fsid()
+ 
+@@ -181,7 +181,7 @@ class RBDDriver(object):
+             LOG.debug('not cloneable: %s', e)
+             return False
+ 
+-        if self._get_fsid() != fsid:
++        if self.get_fsid() != fsid:
+             reason = '%s is in a different ceph cluster' % url
+             LOG.debug(reason)
+             return False
+@@ -215,6 +215,33 @@ class RBDDriver(object):
+                                      dest_name,
+                                      features=rbd.RBD_FEATURE_LAYERING)
+ 
++    def flatten(self, pool, name):
++        LOG.debug('flattening %(pool)s/%(img)s' %
++                  dict(pool=pool, img=name))
++        with RBDVolumeProxy(self, name, pool) as vol:
++            vol.flatten()
++
++    def create_snapshot(self, name, snap_name):
++        """Creates an rbd snapshot."""
++        with RBDVolumeProxy(self, name) as volume:
++            snap = snap_name.encode('utf-8')
++            volume.create_snap(snap)
++            if self.supports_layering():
++                volume.protect_snap(snap)
++
++    def delete_snapshot(self, name, snap_name):
++        """Deletes an rbd snapshot."""
++        # NOTE(dosaboy): this was broken by commit cbe1d5f. Ensure names are
++        #                utf-8 otherwise librbd will barf.
++        snap = snap_name.encode('utf-8')
++        with RBDVolumeProxy(self, name) as volume:
++            if self.supports_layering():
++                try:
++                    volume.unprotect_snap(snap)
++                except rbd.ImageBusy:
++                    raise exception.SnapshotIsBusy(snapshot_name=snap)
++            volume.remove_snap(snap)
++
+     def size(self, name):
+         with RBDVolumeProxy(self, name) as vol:
+             return vol.size()
+@@ -269,10 +296,15 @@ class RBDDriver(object):
+ 
+     def cleanup_volumes(self, instance):
+         def _cleanup_vol(ioctx, volume, retryctx):
++            deletion_marker = '_to_be_deleted_by_glance'
+             try:
+                 rbd.RBD().remove(client.ioctx, volume)
+                 raise loopingcall.LoopingCallDone(retvalue=False)
+-            except (rbd.ImageBusy, rbd.ImageHasSnapshots):
++            except rbd.ImageHasSnapshots:
++                new_name = volume + deletion_marker
++                rbd.RBD().rename(client.ioctx, volume, new_name)
++                raise loopingcall.LoopingCallDone(retvalue=False)
++            except rbd.ImageBusy:
+                 LOG.warn(_LW('rbd remove %(volume)s in pool %(pool)s '
+                              'failed'),
+                          {'volume': volume, 'pool': self.pool})
+@@ -282,8 +314,12 @@ class RBDDriver(object):
+ 
+         with RADOSClient(self, self.pool) as client:
+ 
++            deletion_marker = '_to_be_deleted_by_glance'
++
+             def belongs_to_instance(disk):
+-                return disk.startswith(instance.uuid)
++                return (disk.startswith(instance.uuid) and
++                        deletion_marker not in disk and
++                        'clone' not in disk)
+ 
+             volumes = rbd.RBD().list(client.ioctx)
+             for volume in filter(belongs_to_instance, volumes):

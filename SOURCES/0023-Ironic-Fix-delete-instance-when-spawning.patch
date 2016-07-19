@@ -1,0 +1,143 @@
+From 7e75d9eaf68d4686ee2b6513b80c003eacf2c775 Mon Sep 17 00:00:00 2001
+From: Lucas Alvares Gomes <lucasagomes@gmail.com>
+Date: Thu, 14 May 2015 10:56:13 +0100
+Subject: [PATCH] Ironic: Fix delete instance when spawning
+
+Nova allows issuing a "nova delete" command when the instance is being
+spawned, that wasn't working in Ironic because the spawn() in the Ironic
+nova driver doesn't return until the node have been deployed or errored
+out and that causes Ironic to hold a lock that prevents the instance
+termination to call destroy() in the Ironic nova driver.
+
+This patch fixes that problem by making the loop waiting on the node to
+get active (or error) in Ironic to also look at the instance task_state
+and see if it's being deleted. In case the instance is being deleted
+mid deployment operation we break the loop releasing the lock and then
+destroy() gets called in Ironic aborting the deployment there.
+
+(cherry picked from commit ea3967a1fb47297608defd680286fd9051ff5bbe)
+
+Resolves: (partial) rhbz#1230163
+Upstream-Liberty: https://review.openstack.org/#/c/182992/
+Closes-Bug: #1455000
+Change-Id: I315b8430a92907d27534f7b4828c35792371d6dc
+Reviewed-on: https://code.engineering.redhat.com/gerrit/51683
+Reviewed-by: Jon Schlueter <jschluet@redhat.com>
+Reviewed-by: Matthew Booth <mbooth@redhat.com>
+Tested-by: Lon Hohberger <lhh@redhat.com>
+---
+ nova/tests/unit/virt/ironic/test_driver.py | 42 +++++++++++++++++++++++++-----
+ nova/virt/ironic/driver.py                 |  7 +++++
+ 2 files changed, 43 insertions(+), 6 deletions(-)
+
+diff --git a/nova/tests/unit/virt/ironic/test_driver.py b/nova/tests/unit/virt/ironic/test_driver.py
+index 0794465..3e1ddf0 100644
+--- a/nova/tests/unit/virt/ironic/test_driver.py
++++ b/nova/tests/unit/virt/ironic/test_driver.py
+@@ -24,6 +24,7 @@ from oslo_utils import uuidutils
+ from nova.api.metadata import base as instance_metadata
+ from nova.compute import power_state as nova_states
+ from nova.compute import task_states
++from nova.compute import vm_states
+ from nova import context as nova_context
+ from nova import exception
+ from nova import objects
+@@ -143,8 +144,9 @@ class IronicDriverTestCase(test.NoDBTestCase):
+                           ironic_driver._validate_instance_and_node,
+                           ironicclient, instance)
+ 
++    @mock.patch.object(objects.Instance, 'refresh')
+     @mock.patch.object(ironic_driver, '_validate_instance_and_node')
+-    def test__wait_for_active_pass(self, fake_validate):
++    def test__wait_for_active_pass(self, fake_validate, fake_refresh):
+         instance = fake_instance.fake_instance_obj(self.ctx,
+                 uuid=uuidutils.generate_uuid())
+         node = ironic_utils.get_test_node(
+@@ -152,10 +154,12 @@ class IronicDriverTestCase(test.NoDBTestCase):
+ 
+         fake_validate.return_value = node
+         self.driver._wait_for_active(FAKE_CLIENT, instance)
+-        self.assertTrue(fake_validate.called)
++        fake_validate.assert_called_once_with(FAKE_CLIENT, instance)
++        fake_refresh.assert_called_once_with()
+ 
++    @mock.patch.object(objects.Instance, 'refresh')
+     @mock.patch.object(ironic_driver, '_validate_instance_and_node')
+-    def test__wait_for_active_done(self, fake_validate):
++    def test__wait_for_active_done(self, fake_validate, fake_refresh):
+         instance = fake_instance.fake_instance_obj(self.ctx,
+                 uuid=uuidutils.generate_uuid())
+         node = ironic_utils.get_test_node(
+@@ -165,10 +169,12 @@ class IronicDriverTestCase(test.NoDBTestCase):
+         self.assertRaises(loopingcall.LoopingCallDone,
+                 self.driver._wait_for_active,
+                 FAKE_CLIENT, instance)
+-        self.assertTrue(fake_validate.called)
++        fake_validate.assert_called_once_with(FAKE_CLIENT, instance)
++        fake_refresh.assert_called_once_with()
+ 
++    @mock.patch.object(objects.Instance, 'refresh')
+     @mock.patch.object(ironic_driver, '_validate_instance_and_node')
+-    def test__wait_for_active_fail(self, fake_validate):
++    def test__wait_for_active_fail(self, fake_validate, fake_refresh):
+         instance = fake_instance.fake_instance_obj(self.ctx,
+                 uuid=uuidutils.generate_uuid())
+         node = ironic_utils.get_test_node(
+@@ -178,7 +184,31 @@ class IronicDriverTestCase(test.NoDBTestCase):
+         self.assertRaises(exception.InstanceDeployFailure,
+                 self.driver._wait_for_active,
+                 FAKE_CLIENT, instance)
+-        self.assertTrue(fake_validate.called)
++        fake_validate.assert_called_once_with(FAKE_CLIENT, instance)
++        fake_refresh.assert_called_once_with()
++
++    @mock.patch.object(objects.Instance, 'refresh')
++    @mock.patch.object(ironic_driver, '_validate_instance_and_node')
++    def _wait_for_active_abort(self, instance_params, fake_validate,
++                              fake_refresh):
++        instance = fake_instance.fake_instance_obj(self.ctx,
++                uuid=uuidutils.generate_uuid(),
++                **instance_params)
++        self.assertRaises(exception.InstanceDeployFailure,
++                self.driver._wait_for_active,
++                FAKE_CLIENT, instance)
++        # Assert _validate_instance_and_node wasn't called
++        self.assertFalse(fake_validate.called)
++        fake_refresh.assert_called_once_with()
++
++    def test__wait_for_active_abort_deleting(self):
++        self._wait_for_active_abort({'task_state': task_states.DELETING})
++
++    def test__wait_for_active_abort_deleted(self):
++        self._wait_for_active_abort({'vm_state': vm_states.DELETED})
++
++    def test__wait_for_active_abort_error(self):
++        self._wait_for_active_abort({'vm_state': vm_states.ERROR})
+ 
+     @mock.patch.object(ironic_driver, '_validate_instance_and_node')
+     def test__wait_for_power_state_pass(self, fake_validate):
+diff --git a/nova/virt/ironic/driver.py b/nova/virt/ironic/driver.py
+index d401472..d80f37a 100644
+--- a/nova/virt/ironic/driver.py
++++ b/nova/virt/ironic/driver.py
+@@ -40,6 +40,7 @@ from nova.compute import hv_type
+ from nova.compute import power_state
+ from nova.compute import task_states
+ from nova.compute import vm_mode
++from nova.compute import vm_states
+ from nova import context as nova_context
+ from nova import exception
+ from nova.i18n import _
+@@ -356,6 +357,12 @@ class IronicDriver(virt_driver.ComputeDriver):
+ 
+     def _wait_for_active(self, ironicclient, instance):
+         """Wait for the node to be marked as ACTIVE in Ironic."""
++        instance.refresh()
++        if (instance.task_state == task_states.DELETING or
++            instance.vm_state in (vm_states.ERROR, vm_states.DELETED)):
++            raise exception.InstanceDeployFailure(
++                _("Instance %s provisioning was aborted") % instance.uuid)
++
+         node = _validate_instance_and_node(ironicclient, instance)
+         if node.provision_state == ironic_states.ACTIVE:
+             # job is done

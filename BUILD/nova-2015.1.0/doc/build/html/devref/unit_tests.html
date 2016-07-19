@@ -1,0 +1,182 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Unit Tests &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="up" title="Developer Guide" href="index.html" />
+    <link rel="next" title="Adding a Method to the OpenStack API" href="addmethod.openstackapi.html" />
+    <link rel="prev" title="Setting Up and Using a Development Environment" href="development.environment.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="unit-tests">
+<h1>Unit Tests<a class="headerlink" href="#unit-tests" title="Permalink to this headline">¶</a></h1>
+<p>Nova contains a suite of unit tests, in the nova/tests directory.</p>
+<p>Any proposed code change will be automatically rejected by the OpenStack
+Jenkins server <a class="footnote-reference" href="#f1" id="id1">[1]</a> if the change causes unit test failures.</p>
+<div class="section" id="preferred-way-to-run-the-tests">
+<h2>Preferred way to run the tests<a class="headerlink" href="#preferred-way-to-run-the-tests" title="Permalink to this headline">¶</a></h2>
+<p>The preferred way to run the unit tests is using <tt class="docutils literal"><span class="pre">tox</span></tt>.  See <a class="reference external" href="https://wiki.openstack.org/wiki/Testing#Unit_Tests">the
+unit testing section of the Testing wiki page</a> and <a class="reference external" href="http://git.openstack.org/cgit/openstack/nova/tree/HACKING.rst">Nova&#8217;s HACKING.rst</a>
+for more information.  Following are some simple examples.</p>
+<p>To run the style tests:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span>tox -e pep8
+</pre></div>
+</div>
+<p>You can request multiple tests, separated by commas:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span>tox -e py27,pep8
+</pre></div>
+</div>
+</div>
+<div class="section" id="running-a-subset-of-tests">
+<h2>Running a subset of tests<a class="headerlink" href="#running-a-subset-of-tests" title="Permalink to this headline">¶</a></h2>
+<p>Instead of running all tests, you can specify an individual directory, file,
+class, or method that contains test code.</p>
+<p>To run the tests in the <tt class="docutils literal"><span class="pre">nova/tests/unit/scheduler</span></tt> directory:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span>tox -e py27 nova.tests.unit.scheduler
+</pre></div>
+</div>
+<p>To run the tests in the <tt class="docutils literal"><span class="pre">nova/tests/unit/virt/libvirt/test_driver.py</span></tt> file:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span>tox -e py27 test_driver
+</pre></div>
+</div>
+<p>To run the tests in the <tt class="docutils literal"><span class="pre">CacheConcurrencyTestCase</span></tt> class in
+<tt class="docutils literal"><span class="pre">nova/tests/unit/virt/libvirt/test_driver.py</span></tt>:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span>tox -e py27  test_driver.CacheConcurrencyTestCase
+</pre></div>
+</div>
+<p>To run the <cite>ValidateIntegerTestCase.test_invalid_inputs</cite> test method in
+<tt class="docutils literal"><span class="pre">nova/tests/unit/test_utils.py</span></tt>:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span>tox -epy27 test_utils.ValidateIntegerTestCase.test_invalid_inputs
+</pre></div>
+</div>
+</div>
+<div class="section" id="debugging-strange-test-failures">
+<h2>Debugging strange test failures<a class="headerlink" href="#debugging-strange-test-failures" title="Permalink to this headline">¶</a></h2>
+<p>Things to try when there are odd test failures such as failure on
+jenkins but not locally.</p>
+<p>The venv can get stale. Force a refresh by adding the -r flag:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span>tox -r -e pep8
+</pre></div>
+</div>
+<p class="rubric">Footnotes</p>
+<table class="docutils footnote" frame="void" id="f1" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id1">[1]</a></td><td>See <a class="reference internal" href="jenkins.html"><em>Continuous Integration with Jenkins</em></a>.</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">Unit Tests</a><ul>
+<li><a class="reference internal" href="#preferred-way-to-run-the-tests">Preferred way to run the tests</a></li>
+<li><a class="reference internal" href="#running-a-subset-of-tests">Running a subset of tests</a></li>
+<li><a class="reference internal" href="#debugging-strange-test-failures">Debugging strange test failures</a></li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="development.environment.html"
+                                  title="previous chapter">Setting Up and Using a Development Environment</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="addmethod.openstackapi.html"
+                                  title="next chapter">Adding a Method to the OpenStack API</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/devref/unit_tests.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="addmethod.openstackapi.html" title="Adding a Method to the OpenStack API"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="development.environment.html" title="Setting Up and Using a Development Environment"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Developer Guide</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

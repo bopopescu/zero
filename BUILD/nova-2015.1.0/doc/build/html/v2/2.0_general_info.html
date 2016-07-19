@@ -1,0 +1,225 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>General Compute API v2.0 information &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="next" title="Server concepts" href="2.0_server_concepts.html" />
+    <link rel="prev" title="Hypervisor Support Matrix" href="../support-matrix.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="general-compute-api-v2-0-information">
+<h1>General Compute API v2.0 information<a class="headerlink" href="#general-compute-api-v2-0-information" title="Permalink to this headline">¶</a></h1>
+<p>The OpenStack Compute API is defined as a ReSTful HTTP service. The API
+takes advantage of all aspects of the HTTP protocol (methods, URIs,
+media types, response codes, etc.) and providers are free to use
+existing features of the protocol such as caching, persistent
+connections, and content compression among others. For example,
+providers who employ a caching layer may respond with a 203 when a
+request is served from the cache instead of a 200. Additionally,
+providers may offer support for conditional <strong>GET</strong> requests using
+ETags, or they may send a redirect in response to a <strong>GET</strong> request.
+Clients should be written to account for these differences.</p>
+<p>Providers can return information identifying requests in HTTP response
+headers, for example, to facilitate communication between the provider
+and client users.</p>
+<p>OpenStack Compute is a compute service that provides server capacity in
+the cloud. Compute Servers come in different flavors of memory, cores,
+disk space, and CPU, and can be provisioned in minutes. Interactions
+with Compute Servers can happen programmatically with the OpenStack
+Compute API.</p>
+<p>We welcome feedback, comments, and bug reports at
+<a class="reference external" href="http://bugs.launchpad.net/nova">bugs.launchpad.net/nova</a>.</p>
+<div class="section" id="intended-audience">
+<h2>Intended audience<a class="headerlink" href="#intended-audience" title="Permalink to this headline">¶</a></h2>
+<p>This guide assists software developers who want to develop applications
+using the OpenStack Compute API. To use this information, you should
+have access to an account from an OpenStack Compute provider, and you
+should also be familiar with the following concepts:</p>
+<ul class="simple">
+<li>OpenStack Compute service</li>
+<li>ReSTful web services</li>
+<li>HTTP/1.1</li>
+<li>JSON data serialization formats</li>
+</ul>
+</div>
+<div class="section" id="concepts">
+<h2>Concepts<a class="headerlink" href="#concepts" title="Permalink to this headline">¶</a></h2>
+<p>To use the OpenStack Compute API effectively, you should understand
+several key concepts:</p>
+<ul>
+<li><p class="first"><strong>Server</strong></p>
+<p>A virtual machine (VM) instance in the compute system. Flavor and
+image are requisite elements when creating a server.</p>
+</li>
+<li><p class="first"><strong>Flavor</strong></p>
+<p>An available hardware configuration for a server. Each flavor has a
+unique combination of disk space, memory capacity and priority for
+CPU time.</p>
+</li>
+<li><p class="first"><strong>Image</strong></p>
+<p>A collection of files used to create or rebuild a server. Operators
+provide a number of pre-built OS images by default. You may also
+create custom images from cloud servers you have launched. These
+custom images are useful for backup purposes or for producing “gold”
+server images if you plan to deploy a particular server configuration
+frequently.</p>
+</li>
+<li><p class="first"><strong>Reboot</strong></p>
+<p>Use this function to perform either a soft or hard reboot of a
+server. With a soft reboot, the operating system is signaled to
+restart, which allows for a graceful shutdown of all processes. A
+hard reboot is the equivalent of power cycling the server. The
+virtualization platform should ensure that the reboot action has
+completed successfully even in cases in which the underlying
+domain/VM is paused or halted/stopped.</p>
+</li>
+<li><p class="first"><strong>Rebuild</strong></p>
+<p>Use this function to remove all data on the server and replaces it
+with the specified image. Server ID and IP addresses remain the same.</p>
+</li>
+<li><p class="first"><strong>Resize</strong></p>
+<p>Use this function to convert an existing server to a different
+flavor, in essence, scaling the server up or down. The original
+server is saved for a period of time to allow rollback if there is a
+problem. All resizes should be tested and explicitly confirmed, at
+which time the original server is removed. All resizes are
+automatically confirmed after 24 hours if you do not confirm or
+revert them.</p>
+</li>
+<li><p class="first"><strong>Pause</strong></p>
+<p>You can pause a server by making a pause request. This request stores
+the state of the VM in RAM. A paused instance continues to run in a
+frozen state.</p>
+</li>
+<li><p class="first"><strong>Suspend</strong></p>
+<p>Administrative users might want to suspend an instance if it is
+infrequently used or to perform system maintenance. When you suspend
+an instance, its VM state is stored on disk, all memory is written to
+disk, and the virtual machine is stopped. Suspending an instance is
+similar to placing a device in hibernation; memory and vCPUs become
+available to create other instances.</p>
+</li>
+</ul>
+</div>
+<div class="section" id="reference">
+<h2>Reference<a class="headerlink" href="#reference" title="Permalink to this headline">¶</a></h2>
+<p>For a reference listing for the Compute API v2, see the <a class="reference external" href="http://developer.openstack.org/api-ref-compute-v2.html">*Compute API v2
+reference
+(CURRENT)*</a>.</p>
+<p>For information about Compute API v 2 extensions, see the <a class="reference external" href="http://developer.openstack.org/api-ref-compute-v2-ext.html">*Compute API v2
+extensions
+(CURRENT)*</a>.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">General Compute API v2.0 information</a><ul>
+<li><a class="reference internal" href="#intended-audience">Intended audience</a></li>
+<li><a class="reference internal" href="#concepts">Concepts</a></li>
+<li><a class="reference internal" href="#reference">Reference</a></li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="../support-matrix.html"
+                                  title="previous chapter">Hypervisor Support Matrix</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="2.0_server_concepts.html"
+                                  title="next chapter">Server concepts</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/v2/2.0_general_info.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="2.0_server_concepts.html" title="Server concepts"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="../support-matrix.html" title="Hypervisor Support Matrix"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

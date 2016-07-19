@@ -1,0 +1,377 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Developer Guide &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="next" title="Setting Up and Using a Development Environment" href="development.environment.html" />
+    <link rel="prev" title="Welcome to Nova’s developer documentation!" href="../index.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="developer-guide">
+<h1>Developer Guide<a class="headerlink" href="#developer-guide" title="Permalink to this headline">¶</a></h1>
+<p>In this section you will find information on Nova&#8217;s lower level programming APIs.</p>
+<div class="section" id="programming-howtos-and-tutorials">
+<h2>Programming HowTos and Tutorials<a class="headerlink" href="#programming-howtos-and-tutorials" title="Permalink to this headline">¶</a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="development.environment.html">Setting Up and Using a Development Environment</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="development.environment.html#setup">Setup</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="development.environment.html#using-devstack">Using DevStack</a></li>
+<li class="toctree-l3"><a class="reference internal" href="development.environment.html#explicit-install-clone">Explicit Install/Clone</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="development.environment.html#building-the-documentation">Building the Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="development.environment.html#running-unit-tests">Running unit tests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="development.environment.html#using-a-remote-debugger">Using a remote debugger</a></li>
+<li class="toctree-l2"><a class="reference internal" href="development.environment.html#using-fake-computes-for-tests">Using fake computes for tests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="development.environment.html#contributing-your-work">Contributing Your Work</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="unit_tests.html">Unit Tests</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="unit_tests.html#preferred-way-to-run-the-tests">Preferred way to run the tests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="unit_tests.html#running-a-subset-of-tests">Running a subset of tests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="unit_tests.html#debugging-strange-test-failures">Debugging strange test failures</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="addmethod.openstackapi.html">Adding a Method to the OpenStack API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="addmethod.openstackapi.html#routing">Routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="addmethod.openstackapi.html#controllers-and-actions">Controllers and actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="addmethod.openstackapi.html#serialization">Serialization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="addmethod.openstackapi.html#faults">Faults</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="gmr.html">Guru Meditation Reports</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="gmr.html#generating-a-gmr">Generating a GMR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gmr.html#structure-of-a-gmr">Structure of a GMR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gmr.html#adding-support-for-gmrs-to-new-executables">Adding Support for GMRs to New Executables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gmr.html#extending-the-gmr">Extending the GMR</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api_plugins.html">API Plugins</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api_plugins.html#background">Background</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_plugins.html#basic-plugin-structure">Basic plugin structure</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="api_plugins.html#policy">Policy</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="api_plugins.html#support-files">Support files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_plugins.html#unit-tests">Unit Tests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_plugins.html#functional-tests-and-api-samples">Functional tests and API Samples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_plugins.html#commit-message-tags">Commit message tags</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api_microversions.html">API Microversions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api_microversions.html#background">Background</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_microversions.html#in-code">In Code</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="api_microversions.html#adding-a-new-api-method">Adding a new API method</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api_microversions.html#removing-an-api-method">Removing an API method</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api_microversions.html#changing-a-method-s-behaviour">Changing a method&#8217;s behaviour</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api_microversions.html#a-method-with-only-small-changes-between-versions">A method with only small changes between versions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api_microversions.html#a-change-in-schema-only">A change in schema only</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api_microversions.html#when-not-using-decorators">When not using decorators</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="api_microversions.html#other-necessary-changes">Other necessary changes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_microversions.html#allocating-a-microversion">Allocating a microversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api_microversions.html#testing-microversioned-api-methods">Testing Microversioned API Methods</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="background-concepts-for-nova">
+<h2>Background Concepts for Nova<a class="headerlink" href="#background-concepts-for-nova" title="Permalink to this headline">¶</a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Nova System Architecture</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html#components">Components</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="aggregates.html">Host Aggregates</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="aggregates.html#xen-pool-host-aggregates">Xen Pool Host Aggregates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="aggregates.html#design">Design</a></li>
+<li class="toctree-l2"><a class="reference internal" href="aggregates.html#using-the-nova-cli">Using the Nova CLI</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="aggregates.html#usage">Usage</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cells.html">Cells V2</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="cells.html#manifesto">Manifesto</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cells.html#problem">Problem</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cells.html#proposal">Proposal</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cells.html#benefits">Benefits</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cells.html#comparison-with-current-cells">Comparison with current cells</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cells.html#database-split">Database split</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="cells.html#global-api-level-tables">Global (API-level) Tables</a></li>
+<li class="toctree-l3"><a class="reference internal" href="cells.html#cell-level-tables">Cell-level Tables</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="threading.html">Threading model</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="threading.html#yielding-the-thread-in-long-running-tasks">Yielding the thread in long-running tasks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="threading.html#mysql-access-and-eventlet">MySQL access and eventlet</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="vmstates.html">Virtual Machine States and Transitions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="vmstates.html#preconditions-for-commands">Preconditions for commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="vmstates.html#create-instance-states">Create instance states</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="i18n.html">Internationalization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="filter_scheduler.html">Filter Scheduler</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="filter_scheduler.html#filtering">Filtering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="filter_scheduler.html#weights">Weights</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="rpc.html">AMQP and Nova</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="rpc.html#nova-rpc-mappings">Nova RPC Mappings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rpc.html#rpc-calls">RPC Calls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rpc.html#rpc-casts">RPC Casts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rpc.html#amqp-broker-load">AMQP Broker Load</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rpc.html#rabbitmq-gotchas">RabbitMQ Gotchas</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="hooks.html">Hooks</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="hooks.html#what-are-hooks-good-for">What are hooks good for?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hooks.html#what-are-hooks-not-good-for">What are hooks NOT good for?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hooks.html#declaring-hooks-in-the-nova-codebase">Declaring hooks in the Nova codebase</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hooks.html#adding-hook-object-code">Adding hook object code</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="upgrade.html">Upgrades</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="upgrade.html#concepts">Concepts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="upgrade.html#process">Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="upgrade.html#testing">Testing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="upgrade.html#unresolved-issues">Unresolved issues</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="policy_enforcement.html">Rest API Policy Enforcement</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="policy_enforcement.html#problems-with-current-system">Problems with current system</a></li>
+<li class="toctree-l2"><a class="reference internal" href="policy_enforcement.html#future-of-policy-enforcement">Future of policy enforcement</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="policy_enforcement.html#enforcement-policy-at-rest-api-layer">Enforcement policy at REST API layer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="policy_enforcement.html#removes-hard-code-permission-checks">Removes hard-code permission checks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="policy_enforcement.html#port-policy-d-from-oslo-incubator-into-nova">Port policy.d from oslo-incubator into nova</a></li>
+<li class="toctree-l3"><a class="reference internal" href="policy_enforcement.html#use-different-prefix-in-policy-rule-name-for-ec2-v2-v2-1-api">Use different prefix in policy rule name for EC2/V2/V2.1 API</a></li>
+<li class="toctree-l3"><a class="reference internal" href="policy_enforcement.html#group-the-policy-rules-into-different-policy-files">Group the policy rules into different policy files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="policy_enforcement.html#add-separated-rule-for-each-api-in-extension">Add separated rule for each API in extension</a></li>
+<li class="toctree-l3"><a class="reference internal" href="policy_enforcement.html#enable-action-level-rule-override-extension-level-rule">Enable action level rule override extension level rule</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="policy_enforcement.html#existed-nova-api-being-restricted">Existed Nova API being restricted</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="development-policies">
+<h2>Development policies<a class="headerlink" href="#development-policies" title="Permalink to this headline">¶</a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="kilo.blueprints.html">Blueprints in Kilo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="kilo.blueprints.html#when-is-a-blueprint-needed">When is a blueprint needed?</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="kilo.blueprints.html#juno">Juno</a></li>
+<li class="toctree-l2"><a class="reference internal" href="kilo.blueprints.html#problem">Problem</a></li>
+<li class="toctree-l2"><a class="reference internal" href="kilo.blueprints.html#kilo">Kilo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="kilo.blueprints.html#examples">Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="kilo.blueprints.html#project-priorities">Project Priorities</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="kilo.blueprints.html#icehouse">Icehouse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="kilo.blueprints.html#id1">Juno</a></li>
+<li class="toctree-l2"><a class="reference internal" href="kilo.blueprints.html#id2">Problem</a></li>
+<li class="toctree-l2"><a class="reference internal" href="kilo.blueprints.html#id3">Kilo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="kilo.blueprints.html#id4">Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="policies.html">Development policies</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="policies.html#out-of-tree-support">Out Of Tree Support</a></li>
+<li class="toctree-l2"><a class="reference internal" href="policies.html#public-contractual-apis">Public Contractual APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="policies.html#rest-apis">REST APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="policies.html#patches-and-reviews">Patches and Reviews</a></li>
+<li class="toctree-l2"><a class="reference internal" href="policies.html#reverts-for-retrospective-vetos">Reverts for Retrospective Vetos</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="testing-guides">
+<h2>Testing guides<a class="headerlink" href="#testing-guides" title="Permalink to this headline">¶</a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="testing/libvirt-numa.html">Testing NUMA related hardware setup with libvirt</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="testing/libvirt-numa.html#provisioning-a-virtual-machine-for-testing">Provisioning a virtual machine for testing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing/libvirt-numa.html#setting-up-a-devstack-environment">Setting up a devstack environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing/libvirt-numa.html#testing-basis-non-numa-usage">Testing basis non-NUMA usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing/libvirt-numa.html#reconfiguring-the-test-instance-to-have-numa-topology">Reconfiguring the test instance to have NUMA topology</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing/libvirt-numa.html#testing-instance-boot-with-no-numa-topology-requested">Testing instance boot with no NUMA topology requested</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing/libvirt-numa.html#testing-instance-boot-with-1-numa-cell-requested">Testing instance boot with 1 NUMA cell requested</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="testing/serial-console.html">Testing Serial Console</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="testing/serial-console.html#setting-up-a-devstack-environemnt">Setting up a devstack environemnt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing/serial-console.html#starting-the-nova-serialproxy-service">Starting the nova-serialproxy service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing/serial-console.html#setting-up-a-nova-environemnt">Setting up a Nova environemnt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing/serial-console.html#testing-the-api">Testing the API</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="other-resources">
+<h2>Other Resources<a class="headerlink" href="#other-resources" title="Permalink to this headline">¶</a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="launchpad.html">Project hosting with Launchpad</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="launchpad.html#launchpad-credentials">Launchpad credentials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="launchpad.html#mailing-list">Mailing list</a></li>
+<li class="toctree-l2"><a class="reference internal" href="launchpad.html#bug-tracking">Bug tracking</a></li>
+<li class="toctree-l2"><a class="reference internal" href="launchpad.html#feature-requests-blueprints">Feature requests (Blueprints)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="launchpad.html#technical-support-answers">Technical support (Answers)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="gerrit.html">Code Reviews with Gerrit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="jenkins.html">Continuous Integration with Jenkins</a></li>
+</ul>
+</div>
+</div>
+<div class="section" id="module-reference">
+<h2>Module Reference<a class="headerlink" href="#module-reference" title="Permalink to this headline">¶</a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="services.html">Services, Managers and Drivers</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="services.html#the-nova-service-module">The <tt class="docutils literal"><span class="pre">nova.service</span></tt> Module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="services.html#the-nova-manager-module">The <tt class="docutils literal"><span class="pre">nova.manager</span></tt> Module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="services.html#implementation-specific-drivers">Implementation-Specific Drivers</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="indices-and-tables">
+<h2>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><a class="reference internal" href="../genindex.html"><em>Index</em></a></li>
+<li><a class="reference internal" href="../py-modindex.html"><em>Module Index</em></a></li>
+<li><a class="reference internal" href="../search.html"><em>Search Page</em></a></li>
+</ul>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">Developer Guide</a><ul>
+<li><a class="reference internal" href="#programming-howtos-and-tutorials">Programming HowTos and Tutorials</a></li>
+<li><a class="reference internal" href="#background-concepts-for-nova">Background Concepts for Nova</a></li>
+<li><a class="reference internal" href="#development-policies">Development policies</a></li>
+<li><a class="reference internal" href="#testing-guides">Testing guides</a></li>
+<li><a class="reference internal" href="#other-resources">Other Resources</a></li>
+<li><a class="reference internal" href="#module-reference">Module Reference</a></li>
+<li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="../index.html"
+                                  title="previous chapter">Welcome to Nova&#8217;s developer documentation!</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="development.environment.html"
+                                  title="next chapter">Setting Up and Using a Development Environment</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/devref/index.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="development.environment.html" title="Setting Up and Using a Development Environment"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="../index.html" title="Welcome to Nova’s developer documentation!"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,159 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Adding a Method to the OpenStack API &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="up" title="Developer Guide" href="index.html" />
+    <link rel="next" title="Guru Meditation Reports" href="gmr.html" />
+    <link rel="prev" title="Unit Tests" href="unit_tests.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="adding-a-method-to-the-openstack-api">
+<h1>Adding a Method to the OpenStack API<a class="headerlink" href="#adding-a-method-to-the-openstack-api" title="Permalink to this headline">¶</a></h1>
+<p>The interface is a mostly RESTful API. REST stands for Representational State Transfer and provides an architecture &#8220;style&#8221; for distributed systems using HTTP for transport. Figure out a way to express your request and response in terms of resources that are being created, modified, read, or destroyed.</p>
+<div class="section" id="routing">
+<h2>Routing<a class="headerlink" href="#routing" title="Permalink to this headline">¶</a></h2>
+<p>To map URLs to controllers+actions, OpenStack uses the Routes package, a clone of Rails routes for Python implementations. See <a class="reference external" href="http://routes.groovie.org/">http://routes.groovie.org/</a> for more information.</p>
+<p>URLs are mapped to &#8220;action&#8221; methods on &#8220;controller&#8221; classes in <tt class="docutils literal"><span class="pre">nova/api/openstack/__init__/ApiRouter.__init__</span></tt> .</p>
+<dl class="docutils">
+<dt>See <a class="reference external" href="http://routes.groovie.org/manual.html">http://routes.groovie.org/manual.html</a> for all syntax, but you&#8217;ll probably just need these two:</dt>
+<dd><ul class="first last simple">
+<li>mapper.connect() lets you map a single URL to a single action on a controller.</li>
+<li>mapper.resource() connects many standard URLs to actions on a controller.</li>
+</ul>
+</dd>
+</dl>
+</div>
+<div class="section" id="controllers-and-actions">
+<h2>Controllers and actions<a class="headerlink" href="#controllers-and-actions" title="Permalink to this headline">¶</a></h2>
+<p>Controllers live in <tt class="docutils literal"><span class="pre">nova/api/openstack</span></tt>, and inherit from nova.wsgi.Controller.</p>
+<p>See <tt class="docutils literal"><span class="pre">nova/api/openstack/compute/servers.py</span></tt> for an example.</p>
+<p>Action methods take parameters that are sucked out of the URL by mapper.connect() or .resource().  The first two parameters are self and the WebOb request, from which you can get the req.environ, req.body, req.headers, etc.</p>
+</div>
+<div class="section" id="serialization">
+<h2>Serialization<a class="headerlink" href="#serialization" title="Permalink to this headline">¶</a></h2>
+<p>Actions return a dictionary, and wsgi.Controller serializes that to JSON or XML based on the request&#8217;s content-type.</p>
+<p>If you define a new controller, you&#8217;ll need to define a <tt class="docutils literal"><span class="pre">_serialization_metadata</span></tt> attribute on the class, to tell wsgi.Controller how to convert your dictionary to XML.  It needs to know the singular form of any list tag (e.g. <tt class="docutils literal"><span class="pre">&lt;servers&gt;</span></tt> list contains <tt class="docutils literal"><span class="pre">&lt;server&gt;</span></tt> tags) and which dictionary keys are to be XML attributes as opposed to subtags (e.g. <tt class="docutils literal"><span class="pre">&lt;server</span> <span class="pre">id=&quot;4&quot;/&gt;</span></tt> instead of <tt class="docutils literal"><span class="pre">&lt;server&gt;&lt;id&gt;4&lt;/id&gt;&lt;/server&gt;</span></tt>).</p>
+<p>See <cite>nova/api/openstack/compute/servers.py</cite> for an example.</p>
+</div>
+<div class="section" id="faults">
+<h2>Faults<a class="headerlink" href="#faults" title="Permalink to this headline">¶</a></h2>
+<p>If you need to return a non-200, you should
+return faults.Fault(webob.exc.HTTPNotFound())
+replacing the exception as appropriate.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">Adding a Method to the OpenStack API</a><ul>
+<li><a class="reference internal" href="#routing">Routing</a></li>
+<li><a class="reference internal" href="#controllers-and-actions">Controllers and actions</a></li>
+<li><a class="reference internal" href="#serialization">Serialization</a></li>
+<li><a class="reference internal" href="#faults">Faults</a></li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="unit_tests.html"
+                                  title="previous chapter">Unit Tests</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="gmr.html"
+                                  title="next chapter">Guru Meditation Reports</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/devref/addmethod.openstackapi.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="gmr.html" title="Guru Meditation Reports"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="unit_tests.html" title="Unit Tests"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Developer Guide</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

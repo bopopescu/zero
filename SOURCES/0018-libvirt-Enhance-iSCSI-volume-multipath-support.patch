@@ -1,0 +1,617 @@
+From d4360beecda645711327805bcbed5337c2fd7de3 Mon Sep 17 00:00:00 2001
+From: Sahid Orentino Ferdjaoui <sahid.ferdjaoui@redhat.com>
+Date: Wed, 17 Jun 2015 10:04:18 +0200
+Subject: [PATCH] libvirt: Enhance iSCSI volume multipath support
+
+Currently, nova-compute supports multipath for iSCSI volume data
+path. It depends on response to targets discovery from the main
+iSCSI portal, expecting multiple portal addresses to be contained.
+
+However, some arrays only respond to discovery with a single portal
+address, even if secondary portals are available. In this case,
+nova-compute cannot know secondary portals and corresponding iSCSI
+target IQN, so nova-compute cannot establish multiple sessions for
+the target(s). To enable nova-compute to login to secondary portals,
+Cinder's response to initialize_connection API will return
+connection_info with multiple portal addresses/iqns/luns when
+multipath=True is specifed in the connector info. For example:
+
+  {"driver_volume_type": "iscsi",
+   "data": {"target_portals": ["10.0.2.15:3260", "10.0.3.15:3260"],
+            "target_iqns": ["iqn.2010-10.org.example:target-01",
+                            "iqn.2010-10.org.example:target-02"],
+            "target_luns": [1, 2],
+	    ...}}
+
+Nova should try to login to every portal addresses/iqns/luns when
+they are passed from cinder
+
+Upstream-Liverty: https://review.openstack.org/#/c/134683/
+Resolves: rhbz#1228295
+Implements: blueprint iscsi-multipath-enhancement
+Change-Id: Iddd67d6b5b27ccc1e0a3963cbf7896b60da30b01
+Reviewed-on: https://code.engineering.redhat.com/gerrit/50900
+Reviewed-by: Victor Stinner <vstinner@redhat.com>
+Reviewed-by: Sahid Ferdjaoui <sahid.ferdjaoui@redhat.com>
+Tested-by: Sahid Ferdjaoui <sahid.ferdjaoui@redhat.com>
+---
+ etc/nova/rootwrap.d/compute.filters         |   3 +
+ nova/tests/unit/virt/libvirt/test_driver.py |  11 ++
+ nova/tests/unit/virt/libvirt/test_volume.py | 150 +++++++++++++++++++++++++---
+ nova/virt/libvirt/driver.py                 |  11 ++
+ nova/virt/libvirt/volume.py                 | 137 ++++++++++++++++++-------
+ 5 files changed, 261 insertions(+), 51 deletions(-)
+
+diff --git a/etc/nova/rootwrap.d/compute.filters b/etc/nova/rootwrap.d/compute.filters
+index acb5b25..0ddb6c8 100644
+--- a/etc/nova/rootwrap.d/compute.filters
++++ b/etc/nova/rootwrap.d/compute.filters
+@@ -200,6 +200,9 @@ read_shadow: RegExpFilter, cat, root, cat, (/var|/usr)?/tmp/openstack-vfs-localf
+ # nova/virt/libvirt/volume.py: 'multipath' '-R'
+ multipath: CommandFilter, multipath, root
+ 
++# nova/virt/libvirt/volume.py: 'multipathd' 'show' 'status'
++multipathd: CommandFilter, multipathd, root
++
+ # nova/virt/libvirt/utils.py:
+ systool: CommandFilter, systool, root
+ 
+diff --git a/nova/tests/unit/virt/libvirt/test_driver.py b/nova/tests/unit/virt/libvirt/test_driver.py
+index 1f9e651..8cf98d3 100644
+--- a/nova/tests/unit/virt/libvirt/test_driver.py
++++ b/nova/tests/unit/virt/libvirt/test_driver.py
+@@ -847,6 +847,17 @@ class LibvirtConnTestCase(test.NoDBTestCase):
+         result = drvr.get_volume_connector(volume)
+         self.assertThat(expected, matchers.DictMatches(result))
+ 
++        self.flags(iscsi_use_multipath=True, group='libvirt')
++        expected['multipath'] = True
++        with mock.patch.object(utils, 'execute'):
++            result = drvr.get_volume_connector(volume)
++        self.assertThat(expected, matchers.DictMatches(result))
++
++        with mock.patch.object(utils, 'execute') as mock_execute:
++            mock_execute.side_effect = processutils.ProcessExecutionError
++            self.assertRaises(processutils.ProcessExecutionError,
++                              drvr.get_volume_connector, volume)
++
+     def test_get_connector_storage_ip(self):
+         ip = '100.100.100.100'
+         storage_ip = '101.101.101.101'
+diff --git a/nova/tests/unit/virt/libvirt/test_volume.py b/nova/tests/unit/virt/libvirt/test_volume.py
+index 3ec8357..016de0c 100644
+--- a/nova/tests/unit/virt/libvirt/test_volume.py
++++ b/nova/tests/unit/virt/libvirt/test_volume.py
+@@ -313,6 +313,17 @@ class LibvirtVolumeTestCase(test.NoDBTestCase):
+         fake_dev_path = "/dev/disk/by-path/" + dev_format
+         return fake_dev_path
+ 
++    def _iscsi_connection_multipath(self, volume, locations, iqns, luns):
++        return {
++                'driver_volume_type': 'iscsi',
++                'data': {
++                    'volume_id': volume['id'],
++                    'target_portals': locations,
++                    'target_iqns': iqns,
++                    'target_luns': luns
++                }
++        }
++
+     def test_rescan_multipath(self):
+         libvirt_driver = volume.LibvirtISCSIVolumeDriver(self.fake_conn)
+         libvirt_driver._rescan_multipath()
+@@ -352,8 +363,8 @@ Setting up iSCSI targets: unused
+             self.stubs.Set(glob, 'glob', lambda x: [expected_device])
+             self.stubs.Set(libvirt_driver, '_validate_transport',
+                            lambda x: True)
+-        device = libvirt_driver._get_host_device(iscsi_properties)
+-        self.assertEqual(expected_device, device)
++        device = libvirt_driver._get_host_devices(iscsi_properties)
++        self.assertEqual([expected_device], device)
+ 
+     def test_libvirt_iscsi_get_host_device_with_transport(self):
+         self.flags(iscsi_iface='fake_transport', group='libvirt')
+@@ -386,8 +397,9 @@ Setting up iSCSI targets: unused
+         connection_info = self.iscsi_connection(self.vol, self.location,
+                                                 self.iqn, False, transport)
+         if transport is not None:
+-            self.stubs.Set(libvirt_driver, '_get_host_device',
+-                           lambda x: self.generate_device(transport, 1, False))
++            self.stubs.Set(libvirt_driver, '_get_host_devices',
++                           lambda x: [self.generate_device(transport,
++                                                           1, False)])
+             self.stubs.Set(libvirt_driver, '_validate_transport',
+                            lambda x: True)
+         libvirt_driver.connect_volume(connection_info, self.disk_info)
+@@ -421,8 +433,9 @@ Setting up iSCSI targets: unused
+         libvirt_driver = volume.LibvirtISCSIVolumeDriver(self.fake_conn)
+         dev_name = self.generate_device(transport, 1, True)
+         if transport is not None:
+-            self.stubs.Set(libvirt_driver, '_get_host_device',
+-                           lambda x: self.generate_device(transport, 1, False))
++            self.stubs.Set(libvirt_driver, '_get_host_devices',
++                           lambda x: [self.generate_device(transport,
++                                                           1, False)])
+             self.stubs.Set(libvirt_driver, '_validate_transport',
+                            lambda x: True)
+         devs = [self.generate_device(transport, 2, False)]
+@@ -445,6 +458,117 @@ Setting up iSCSI targets: unused
+                               '/sys/block/%s/device/delete' % dev_name)]
+         self.assertEqual(self.executes, expected_commands)
+ 
++    def test_libvirt_iscsi_driver_with_multiple_portals(self):
++        libvirt_driver = volume.LibvirtISCSIVolumeDriver(self.fake_conn)
++        location2 = '10.0.3.15:3260'
++        iqn2 = self.iqn + '-2'
++        iscsi_devs = ['ip-%s-iscsi-%s-lun-1' % (self.location, self.iqn),
++                      'ip-%s-iscsi-%s-lun-2' % (location2, iqn2)]
++        devs = ['/dev/disk/by-path/%s' % dev for dev in iscsi_devs]
++        mpdev = '/dev/mapper/fake-multipath-devname'
++        with contextlib.nested(
++            mock.patch.object(os.path, 'exists', return_value=True),
++            mock.patch.object(os.path, 'realpath', side_effect=lambda x: x),
++            mock.patch.object(self.fake_conn, '_get_all_block_devices',
++                              return_value=devs),
++            mock.patch.object(libvirt_driver, '_get_iscsi_devices',
++                              return_value=iscsi_devs),
++            mock.patch.object(libvirt_driver, '_rescan_multipath'),
++            mock.patch.object(libvirt_driver, '_run_multipath'),
++            mock.patch.object(libvirt_driver, '_get_multipath_device_name',
++                              return_value=mpdev),
++            mock.patch.object(libvirt_driver, '_get_multipath_iqn',
++                              return_value=[self.iqn, iqn2]),
++        ) as (mock_exists, mock_realpath, mock_devices, mock_iscsi_devices,
++              mock_rescan_multipath, mock_run_multipath, mock_device_name,
++              mock_get_iqn):
++            libvirt_driver.use_multipath = True
++            vol = {'id': 1, 'name': self.name}
++            connection_info = self._iscsi_connection_multipath(
++                vol, [self.location, location2], [self.iqn, iqn2], [1, 2])
++            libvirt_driver.connect_volume(connection_info, self.disk_info)
++
++            self.assertEqual(mpdev, connection_info['data']['device_path'])
++            expected_commands = [('iscsiadm', '-m', 'node', '-T',
++                                  self.iqn, '-p', self.location, '--login'),
++                                 ('iscsiadm', '-m', 'node', '-T',
++                                  iqn2, '-p', location2, '--login')]
++            for command in expected_commands:
++                self.assertIn(command, self.executes)
++            mock_device_name.assert_called_once_with(devs[0])
++
++            self.executes = []
++            libvirt_driver.disconnect_volume(connection_info, "vde")
++
++            expected_commands = [('iscsiadm', '-m', 'node', '-T',
++                                  self.iqn, '-p', self.location, '--logout'),
++                                 ('iscsiadm', '-m', 'node', '-T',
++                                  iqn2, '-p', location2, '--logout')]
++            for command in expected_commands:
++                self.assertIn(command, self.executes)
++
++    def test_libvirt_iscsi_driver_with_multiple_portals_primary_error(self):
++        libvirt_driver = volume.LibvirtISCSIVolumeDriver(self.fake_conn)
++        location2 = '10.0.3.15:3260'
++        iqn2 = self.iqn + '-2'
++        dev1 = '/dev/disk/by-path/ip-%s-iscsi-%s-lun-1' % (self.location,
++                                                           self.iqn)
++        dev2 = '/dev/disk/by-path/ip-%s-iscsi-%s-lun-2' % (location2, iqn2)
++        iscsi_dev2 = 'ip-%s-iscsi-%s-lun-2' % (location2, iqn2)
++        mpdev = '/dev/mapper/fake-multipath-devname'
++
++        def fake_run_iscsiadm(iscsi_properties, iscsi_command, **kwargs):
++            if iscsi_properties['target_portal'] == self.location:
++                if iscsi_command == ('--login',):
++                    raise processutils.ProcessExecutionError(None, None, 21)
++            return mock.DEFAULT
++
++        with contextlib.nested(
++            mock.patch.object(os.path, 'exists',
++                              side_effect=lambda x: x != dev1),
++            mock.patch.object(os.path, 'realpath', side_effect=lambda x: x),
++            mock.patch.object(self.fake_conn, '_get_all_block_devices',
++                              return_value=[dev2]),
++            mock.patch.object(libvirt_driver, '_rescan_multipath'),
++            mock.patch.object(libvirt_driver, '_run_multipath'),
++            mock.patch.object(libvirt_driver, '_get_iscsi_devices',
++                              return_value=[iscsi_dev2]),
++            mock.patch.object(libvirt_driver, '_get_multipath_device_name',
++                              return_value=mpdev),
++            mock.patch.object(libvirt_driver, '_get_multipath_iqn',
++                              return_value=[iqn2]),
++            mock.patch.object(libvirt_driver, '_run_iscsiadm',
++                              side_effect=fake_run_iscsiadm),
++        ) as (mock_exists, mock_realpath, mock_devices, mock_iscsi_devices,
++              mock_rescan_multipath, mock_run_multipath, mock_device_name,
++              mock_get_iqn, mock_iscsiadm):
++            libvirt_driver.use_multipath = True
++            vol = {'id': 1, 'name': self.name}
++            connection_info = self._iscsi_connection_multipath(
++                vol, [self.location, location2], [self.iqn, iqn2], [1, 2])
++            props = connection_info['data'].copy()
++            libvirt_driver.connect_volume(connection_info, self.disk_info)
++
++            self.assertEqual(mpdev, connection_info['data']['device_path'])
++            mock_device_name.assert_called_once_with(dev2)
++            props['target_portal'] = self.location
++            props['target_iqn'] = self.iqn
++            mock_iscsiadm.assert_any_call(props, ('--login',),
++                                          check_exit_code=[0, 255])
++            props['target_portal'] = location2
++            props['target_iqn'] = iqn2
++            mock_iscsiadm.assert_any_call(props, ('--login',),
++                                          check_exit_code=[0, 255])
++
++            mock_iscsiadm.reset_mock()
++            libvirt_driver.disconnect_volume(connection_info, "vde")
++
++            props = connection_info['data'].copy()
++            props['target_portal'] = location2
++            props['target_iqn'] = iqn2
++            mock_iscsiadm.assert_any_call(props, ('--logout',),
++                                          check_exit_code=[0, 21, 255])
++
+     def test_libvirt_iscsi_driver_still_in_use_with_transport(self):
+         self.flags(iscsi_iface='fake_transport', group='libvirt')
+         self.test_libvirt_iscsi_driver_still_in_use('fake_transport')
+@@ -516,7 +640,7 @@ Setting up iSCSI targets: unused
+         self.stubs.Set(libvirt_driver, '_run_iscsiadm_bare',
+                        lambda x, check_exit_code: ('',))
+         self.stubs.Set(libvirt_driver, '_rescan_iscsi', lambda: None)
+-        self.stubs.Set(libvirt_driver, '_get_host_device', lambda x: None)
++        self.stubs.Set(libvirt_driver, '_get_host_devices', lambda x: [None])
+         self.stubs.Set(libvirt_driver, '_rescan_multipath', lambda: None)
+         fake_multipath_id = 'fake_multipath_id'
+         fake_multipath_device = '/dev/mapper/%s' % fake_multipath_id
+@@ -831,8 +955,8 @@ Setting up iSCSI targets: unused
+                               return_value=ip_iqns),
+             mock.patch.object(libvirt_driver, '_connect_to_iscsi_portal'),
+             mock.patch.object(libvirt_driver, '_rescan_iscsi'),
+-            mock.patch.object(libvirt_driver, '_get_host_device',
+-                              return_value='fake-device'),
++            mock.patch.object(libvirt_driver, '_get_host_devices',
++                              return_value=['fake-device']),
+             mock.patch.object(libvirt_driver, '_rescan_multipath'),
+             mock.patch.object(libvirt_driver, '_get_multipath_device_name',
+                               return_value='/dev/mapper/fake-mpath-devname')
+@@ -1017,8 +1141,8 @@ Setting up iSCSI targets: unused
+         self.stubs.Set(libvirt_driver,
+                        '_get_target_portals_from_iscsiadm_output',
+                        lambda x: [[location, iqn]])
+-        self.stubs.Set(libvirt_driver, '_get_host_device',
+-                       lambda x: self.generate_device('iser', 0, False))
++        self.stubs.Set(libvirt_driver, '_get_host_devices',
++                       lambda x: [self.generate_device('iser', 0, False)])
+ 
+         libvirt_driver.connect_volume(connection_info, disk_info)
+         conf = libvirt_driver.get_config(connection_info, disk_info)
+@@ -1046,8 +1170,8 @@ Setting up iSCSI targets: unused
+         devs = [dev0, dev]
+         self.stubs.Set(self.fake_conn, '_get_all_block_devices', lambda: devs)
+         self.stubs.Set(libvirt_driver, '_get_iscsi_devices', lambda: [])
+-        self.stubs.Set(libvirt_driver, '_get_host_device',
+-                       lambda x: self.generate_device('iser', 1, False))
++        self.stubs.Set(libvirt_driver, '_get_host_devices',
++                       lambda x: [self.generate_device('iser', 1, False)])
+         connection_info = self.iser_connection(vol, location, iqn)
+         mpdev_filepath = '/dev/mapper/foo'
+         disk_info = {
+diff --git a/nova/virt/libvirt/driver.py b/nova/virt/libvirt/driver.py
+index a40e65e..c5ee477 100644
+--- a/nova/virt/libvirt/driver.py
++++ b/nova/virt/libvirt/driver.py
+@@ -941,6 +941,14 @@ class LibvirtDriver(driver.ComputeDriver):
+             return disks
+         return []
+ 
++    def _check_multipathd_running(self):
++        try:
++            utils.execute('multipathd', 'show', 'status', run_as_root=True)
++        except processutils.ProcessExecutionError as err:
++            LOG.error(_LE('multipathd is not running: exit code %(err)s'),
++                      {'err': err.exit_code})
++            raise
++
+     def get_volume_connector(self, instance):
+         if self._initiator is None:
+             self._initiator = libvirt_utils.get_iscsi_initiator()
+@@ -967,6 +975,9 @@ class LibvirtDriver(driver.ComputeDriver):
+ 
+         if self._initiator:
+             connector['initiator'] = self._initiator
++            if CONF.libvirt.iscsi_use_multipath:
++                self._check_multipathd_running()
++                connector['multipath'] = True
+ 
+         if self._fc_wwnns and self._fc_wwpns:
+             connector["wwnns"] = self._fc_wwnns
+diff --git a/nova/virt/libvirt/volume.py b/nova/virt/libvirt/volume.py
+index d60c162..3f3cc2b 100644
+--- a/nova/virt/libvirt/volume.py
++++ b/nova/virt/libvirt/volume.py
+@@ -16,6 +16,7 @@
+ 
+ """Volume drivers for libvirt."""
+ 
++import copy
+ import errno
+ import glob
+ import os
+@@ -390,17 +391,40 @@ class LibvirtISCSIVolumeDriver(LibvirtBaseVolumeDriver):
+         conf.source_path = connection_info['data']['device_path']
+         return conf
+ 
++    def _iterate_multiple_targets(self, iscsi_properties, ips_iqns_luns):
++        for ip, iqn, lun in ips_iqns_luns:
++            props = copy.deepcopy(iscsi_properties)
++            props['target_portal'] = ip
++            props['target_iqn'] = iqn
++            props['target_lun'] = lun
++            yield props
++
++    def _multipath_targets(self, iscsi_properties):
++        return zip(iscsi_properties.get('target_portals', []),
++                   iscsi_properties.get('target_iqns', []),
++                   iscsi_properties.get('target_luns', []))
++
++    def _discover_iscsi_portals(self, iscsi_properties):
++        if all([key in iscsi_properties for key in ('target_portals',
++                                                    'target_iqns')]):
++            # use targets specified by iscsi_properties
++            return zip(iscsi_properties['target_portals'],
++                       iscsi_properties['target_iqns'])
++
++        # discover and return every available target
++        out = self._run_iscsiadm_discover(iscsi_properties)
++        return self._get_target_portals_from_iscsiadm_output(out)
++
+     @utils.synchronized('connect_volume')
+     def connect_volume(self, connection_info, disk_info):
+         """Attach the volume to instance_name."""
+         iscsi_properties = connection_info['data']
+ 
+-        # multipath installed, discovering other targets if available
+-        # multipath should be configured on the nova-compute node,
+-        # in order to fit storage vendor
+-        out = None
+         if self.use_multipath:
+-            out = self._run_iscsiadm_discover(iscsi_properties)
++            # multipath installed, discovering other targets if available
++            # multipath should be configured on the nova-compute node,
++            # in order to fit storage vendor
++            ips_iqns = self._discover_iscsi_portals(iscsi_properties)
+ 
+             # There are two types of iSCSI multipath devices.  One which shares
+             # the same iqn between multiple portals, and the other which use
+@@ -409,33 +433,34 @@ class LibvirtISCSIVolumeDriver(LibvirtBaseVolumeDriver):
+             # portals.  If it is, it's the former, so use the supplied iqn.
+             # Otherwise, it's the latter, so try the ip,iqn combinations to
+             # find the targets which constitutes the multipath device.
+-            ips_iqns = self._get_target_portals_from_iscsiadm_output(out)
+             same_portal = False
+-            all_portals = set()
+-            match_portals = set()
+-            for ip, iqn in ips_iqns:
+-                all_portals.add(ip)
+-                if iqn == iscsi_properties['target_iqn']:
+-                    match_portals.add(ip)
+-            if len(all_portals) == len(match_portals):
+-                same_portal = True
++            if 'target_iqn' in iscsi_properties:
++                all_portals = set()
++                match_portals = set()
++                for ip, iqn in ips_iqns:
++                    all_portals.add(ip)
++                    if iqn == iscsi_properties['target_iqn']:
++                        match_portals.add(ip)
++                if len(all_portals) == len(match_portals):
++                    same_portal = True
+ 
+             for ip, iqn in ips_iqns:
+-                props = iscsi_properties.copy()
++                props = copy.deepcopy(iscsi_properties)
+                 props['target_portal'] = ip.split(",")[0]
+                 if not same_portal:
+                     props['target_iqn'] = iqn
+                 self._connect_to_iscsi_portal(props)
+ 
+             self._rescan_iscsi()
++            host_devices = self._get_host_devices(iscsi_properties)
++
+         else:
++            host_devices = self._get_host_devices(iscsi_properties)
+             self._connect_to_iscsi_portal(iscsi_properties)
+ 
+             # Detect new/resized LUNs for existing sessions
+             self._run_iscsiadm(iscsi_properties, ("--rescan",))
+ 
+-        host_device = self._get_host_device(iscsi_properties)
+-
+         # The /dev/disk/by-path/... node is not always present immediately
+         # TODO(justinsb): This retry-with-delay is a pattern, move to utils?
+         tries = 0
+@@ -443,28 +468,35 @@ class LibvirtISCSIVolumeDriver(LibvirtBaseVolumeDriver):
+ 
+         # Check host_device only when transport is used, since otherwise it is
+         # directly derived from properties. Only needed for unit tests
+-        while ((self._get_transport() != "default" and not host_device)
+-          or not os.path.exists(host_device)):
++        # Loop until at least 1 path becomes available
++        while ((self._get_transport() != "default" and not host_devices)
++               or all(map(lambda x: not os.path.exists(x), host_devices))):
+             if tries >= self.num_scan_tries:
+                 raise exception.NovaException(_("iSCSI device not found at %s")
+-                                              % (host_device))
++                                              % (host_devices))
+ 
+             LOG.warn(_LW("ISCSI volume not yet found at: %(disk_dev)s. "
+                          "Will rescan & retry.  Try number: %(tries)s"),
+                      {'disk_dev': disk_dev, 'tries': tries})
+ 
+             # The rescan isn't documented as being necessary(?), but it helps
+-            self._run_iscsiadm(iscsi_properties, ("--rescan",))
++            if self.use_multipath:
++                self._rescan_iscsi()
++            else:
++                self._run_iscsiadm(iscsi_properties, ("--rescan",))
+ 
+             # For offloaded open-iscsi transports, host_device cannot be
+             # guessed unlike iscsi_tcp where it can be obtained from
+             # properties, so try and get it again.
+-            if not host_device and self._get_transport() != "default":
+-                host_device = self._get_host_device(iscsi_properties)
++            if not host_devices and self._get_transport() != "default":
++                host_devices = self._get_host_devices(iscsi_properties)
+ 
+             tries = tries + 1
+-            if not host_device or not os.path.exists(host_device):
++
++            if all(map(lambda x: not os.path.exists(x), host_devices)):
+                 time.sleep(tries ** 2)
++            else:
++                break
+ 
+         if tries != 0:
+             LOG.debug("Found iSCSI node %(disk_dev)s "
+@@ -472,6 +504,9 @@ class LibvirtISCSIVolumeDriver(LibvirtBaseVolumeDriver):
+                       {'disk_dev': disk_dev,
+                        'tries': tries})
+ 
++        # choose an accessible host device
++        host_device = next(dev for dev in host_devices if os.path.exists(dev))
++
+         if self.use_multipath:
+             # we use the multipath device instead of the single path device
+             self._rescan_multipath()
+@@ -543,14 +578,15 @@ class LibvirtISCSIVolumeDriver(LibvirtBaseVolumeDriver):
+     def disconnect_volume(self, connection_info, disk_dev):
+         """Detach the volume from instance_name."""
+         iscsi_properties = connection_info['data']
+-        host_device = self._get_host_device(iscsi_properties)
+         multipath_device = None
+         if self.use_multipath:
++            host_devices = self._get_host_devices(iscsi_properties)
+             if 'multipath_id' in iscsi_properties:
+                 multipath_device = ('/dev/mapper/%s' %
+                                     iscsi_properties['multipath_id'])
+             else:
+-                multipath_device = self._get_multipath_device_name(host_device)
++                multipath_device = \
++                    self._get_multipath_device_name_from_list(host_devices)
+ 
+         super(LibvirtISCSIVolumeDriver,
+               self).disconnect_volume(connection_info, disk_dev)
+@@ -559,6 +595,18 @@ class LibvirtISCSIVolumeDriver(LibvirtBaseVolumeDriver):
+             return self._disconnect_volume_multipath_iscsi(iscsi_properties,
+                                                            multipath_device)
+ 
++        # When multiple portals/iqns/luns are specified, we also need to
++        # remove unused devices created by logging into other LUNs' session.
++        ips_iqns_luns = self._multipath_targets(iscsi_properties)
++        if not ips_iqns_luns:
++            ips_iqns_luns = [[iscsi_properties['target_portal'],
++                              iscsi_properties['target_iqn'],
++                              iscsi_properties.get('target_lun', 0)]]
++        for props in self._iterate_multiple_targets(iscsi_properties,
++                                                    ips_iqns_luns):
++            self._disconnect_volume_iscsi(props)
++
++    def _disconnect_volume_iscsi(self, iscsi_properties):
+         # NOTE(vish): Only disconnect from the target if no luns from the
+         #             target are in use.
+         device_byname = ("ip-%s-iscsi-%s-lun-" %
+@@ -569,6 +617,7 @@ class LibvirtISCSIVolumeDriver(LibvirtBaseVolumeDriver):
+                                               and
+                                               dev.startswith(
+                                                         '/dev/disk/by-path/'))]
++        host_device = self._get_host_devices(iscsi_properties)[0]
+         if not devices:
+             self._disconnect_from_iscsi_portal(iscsi_properties)
+         elif host_device not in devices:
+@@ -613,15 +662,14 @@ class LibvirtISCSIVolumeDriver(LibvirtBaseVolumeDriver):
+                 if mpdev:
+                     devices.append(mpdev)
+ 
+-        # Do a discovery to find all targets.
+-        # Targets for multiple paths for the same multipath device
+-        # may not be the same.
+-        out = self._run_iscsiadm_discover(iscsi_properties)
+-
+         # Extract targets for the current multipath device.
+         ips_iqns = []
+         entries = self._get_iscsi_devices()
+-        for ip, iqn in self._get_target_portals_from_iscsiadm_output(out):
++
++        # Do a discovery to find all targets.
++        # Targets for multiple paths for the same multipath device
++        # may not be the same.
++        for ip, iqn in self._discover_iscsi_portals(iscsi_properties):
+             ip_iqn = "%s-iscsi-%s" % (ip.split(",")[0], iqn)
+             for entry in entries:
+                 entry_ip_iqn = entry.split("-lun-")[0]
+@@ -755,6 +803,12 @@ class LibvirtISCSIVolumeDriver(LibvirtBaseVolumeDriver):
+ 
+         return None
+ 
++    def _get_multipath_device_name_from_list(self, single_path_devices):
++        for dev in single_path_devices:
++            mpath_device = self._get_multipath_device_name(dev)
++            if mpath_device:
++                return mpath_device
++
+     def _get_iscsi_devices(self):
+         try:
+             devices = list(os.walk('/dev/disk/by-path'))[0][-1]
+@@ -770,11 +824,13 @@ class LibvirtISCSIVolumeDriver(LibvirtBaseVolumeDriver):
+ 
+     def _delete_mpath(self, iscsi_properties, multipath_device, ips_iqns):
+         entries = self._get_iscsi_devices()
++        luns = dict(zip(iscsi_properties.get('target_iqns', []),
++                        iscsi_properties.get('target_luns', [])))
+         # Loop through ips_iqns to construct all paths
+         iqn_luns = []
+         for ip, iqn in ips_iqns:
+-            iqn_lun = '%s-lun-%s' % (iqn,
+-                                     iscsi_properties.get('target_lun', 0))
++            iqn_lun = '%s-lun-%s' % (
++                iqn, luns.get(iqn, iscsi_properties.get('target_lun', 0)))
+             iqn_luns.append(iqn_lun)
+         for dev in ['/dev/disk/by-path/%s' % dev for dev in entries]:
+             for iqn_lun in iqn_luns:
+@@ -785,7 +841,7 @@ class LibvirtISCSIVolumeDriver(LibvirtBaseVolumeDriver):
+ 
+     def _disconnect_mpath(self, iscsi_properties, ips_iqns):
+         for ip, iqn in ips_iqns:
+-            props = iscsi_properties.copy()
++            props = copy.deepcopy(iscsi_properties)
+             props['target_portal'] = ip
+             props['target_iqn'] = iqn
+             self._disconnect_from_iscsi_portal(props)
+@@ -830,20 +886,25 @@ class LibvirtISCSIVolumeDriver(LibvirtBaseVolumeDriver):
+     def _rescan_multipath(self):
+         self._run_multipath(['-r'], check_exit_code=[0, 1, 21])
+ 
+-    def _get_host_device(self, transport_properties):
++    def _get_host_devices(self, transport_properties):
+         """Find device path in devtemfs."""
++        multipath_targets = self._multipath_targets(transport_properties)
++        if multipath_targets and self._get_transport() == "default":
++            return ["/dev/disk/by-path/ip-%s-iscsi-%s-lun-%s" % x for x in
++                    multipath_targets]
++
+         device = ("ip-%s-iscsi-%s-lun-%s" %
+                   (transport_properties['target_portal'],
+                    transport_properties['target_iqn'],
+                    transport_properties.get('target_lun', 0)))
+         if self._get_transport() == "default":
+-            return ("/dev/disk/by-path/%s" % device)
++            return [("/dev/disk/by-path/%s" % device)]
+         else:
+             host_device = None
+             look_for_device = glob.glob('/dev/disk/by-path/*%s' % device)
+             if look_for_device:
+                 host_device = look_for_device[0]
+-            return host_device
++            return [host_device]
+ 
+     def _reconnect(self, iscsi_properties):
+         # Note: iscsiadm does not support changing iface.iscsi_ifacename

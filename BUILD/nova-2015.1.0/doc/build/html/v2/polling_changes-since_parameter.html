@@ -1,0 +1,137 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Efficient polling with the Changes-Since parameter &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="next" title="Request and response formats" href="request_and_response_formats.html" />
+    <link rel="prev" title="Paginated collections" href="paginated_collections.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="efficient-polling-with-the-changes-since-parameter">
+<h1>Efficient polling with the Changes-Since parameter<a class="headerlink" href="#efficient-polling-with-the-changes-since-parameter" title="Permalink to this headline">¶</a></h1>
+<p>The ReST API allows you to poll for the status of certain operations by
+performing a <strong>GET</strong> on various elements. Rather than re-downloading and
+re-parsing the full status at each polling interval, your ReST client
+may use the <em>``changes-since``</em> parameter to check for changes since a
+previous request. The <em>``changes-since``</em> time is specified as an <a class="reference external" href="http://en.wikipedia.org/wiki/ISO_8601">ISO
+8601</a> dateTime
+(2011-01-24T17:08Z). The form for the timestamp is CCYY-MM-DDThh:mm:ss.
+An optional time zone may be written in by appending the form ±hh:mm
+which describes the timezone as an offset from UTC. When the timezone is
+not specified (2011-01-24T17:08), the UTC timezone is assumed. If
+nothing has changed since the <em>``changes-since``</em> time, an empty list is
+returned. If data has changed, only the items changed since the
+specified time are returned in the response. For example, performing a
+<strong>GET</strong> against
+<a class="reference external" href="https://api.servers.openstack.org/v2/224532/servers">https://api.servers.openstack.org/v2/224532/servers</a>?<em>``changes-since``</em>=2015-01-24T17:08Z
+would list all servers that have changed since Mon, 24 Jan 2015 17:08:00
+UTC.</p>
+<p>To allow clients to keep track of changes, the changes-since filter
+displays items that have been <em>recently</em> deleted. Both images and
+servers contain a <tt class="docutils literal"><span class="pre">DELETED</span></tt> status that indicates that the resource
+has been removed. Implementations are not required to keep track of
+deleted resources indefinitely, so sending a changes since time in the
+distant past may miss deletions.</p>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="paginated_collections.html"
+                                  title="previous chapter">Paginated collections</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="request_and_response_formats.html"
+                                  title="next chapter">Request and response formats</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/v2/polling_changes-since_parameter.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="request_and_response_formats.html" title="Request and response formats"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="paginated_collections.html" title="Paginated collections"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

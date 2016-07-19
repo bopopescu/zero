@@ -1,0 +1,324 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Server concepts &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="next" title="Authentication" href="authentication.html" />
+    <link rel="prev" title="General Compute API v2.0 information" href="2.0_general_info.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="server-concepts">
+<h1>Server concepts<a class="headerlink" href="#server-concepts" title="Permalink to this headline">¶</a></h1>
+<p>For the OpenStack Compute API, a server is a virtual machine (VM) instance in
+the compute system.</p>
+<div class="section" id="server-status">
+<h2>Server status<a class="headerlink" href="#server-status" title="Permalink to this headline">¶</a></h2>
+<p>You can filter the list of servers by image, flavor, name, and status
+through the respective query parameters.</p>
+<p>Servers contain a status attribute that indicates the current server
+state. You can filter on the server status when you complete a list
+servers request. The server status is returned in the response body. The
+server status is one of the following values:</p>
+<p><strong>Server status values</strong></p>
+<ul class="simple">
+<li><tt class="docutils literal"><span class="pre">ACTIVE</span></tt>: The server is active.</li>
+<li><tt class="docutils literal"><span class="pre">BUILD</span></tt>: The server has not finished the original build process.</li>
+<li><tt class="docutils literal"><span class="pre">DELETED</span></tt>: The server is deleted.</li>
+<li><tt class="docutils literal"><span class="pre">ERROR</span></tt>: The server is in error.</li>
+<li><tt class="docutils literal"><span class="pre">HARD_REBOOT</span></tt>: The server is hard rebooting. This is equivalent to
+pulling the power plug on a physical server, plugging it back in, and
+rebooting it.</li>
+<li><tt class="docutils literal"><span class="pre">PASSWORD</span></tt>: The password is being reset on the server.</li>
+<li><tt class="docutils literal"><span class="pre">REBOOT</span></tt>: The server is in a soft reboot state. A reboot command
+was passed to the operating system.</li>
+<li><tt class="docutils literal"><span class="pre">REBUILD</span></tt>: The server is currently being rebuilt from an image.</li>
+<li><tt class="docutils literal"><span class="pre">RESCUE</span></tt>: The server is in rescue mode.</li>
+<li><tt class="docutils literal"><span class="pre">RESIZE</span></tt>: Server is performing the differential copy of data that
+changed during its initial copy. Server is down for this stage.</li>
+<li><tt class="docutils literal"><span class="pre">REVERT_RESIZE</span></tt>: The resize or migration of a server failed for
+some reason. The destination server is being cleaned up and the
+original source server is restarting.</li>
+<li><tt class="docutils literal"><span class="pre">SHUTOFF</span></tt>: The virtual machine (VM) was powered down by the user,
+but not through the OpenStack Compute API. For example, the user
+issued a <tt class="docutils literal"><span class="pre">shutdown</span> <span class="pre">-h</span></tt> command from within the server instance. If
+the OpenStack Compute manager detects that the VM was powered down,
+it transitions the server instance to the SHUTOFF status. If you use
+the OpenStack Compute API to restart the instance, the instance might
+be deleted first, depending on the value in the
+<em>``shutdown_terminate``</em> database field on the Instance model.</li>
+<li><tt class="docutils literal"><span class="pre">SUSPENDED</span></tt>: The server is suspended, either by request or
+necessity. This status appears for only the following hypervisors:
+XenServer/XCP, KVM, and ESXi. Administrative users may suspend an
+instance if it is infrequently used or to perform system maintenance.
+When you suspend an instance, its VM state is stored on disk, all
+memory is written to disk, and the virtual machine is stopped.
+Suspending an instance is similar to placing a device in hibernation;
+memory and vCPUs become available to create other instances.</li>
+<li><tt class="docutils literal"><span class="pre">UNKNOWN</span></tt>: The state of the server is unknown. Contact your cloud
+provider.</li>
+<li><tt class="docutils literal"><span class="pre">VERIFY_RESIZE</span></tt>: System is awaiting confirmation that the server is
+operational after a move or resize.</li>
+</ul>
+<p>The compute provisioning algorithm has an anti-affinity property that
+attempts to spread customer VMs across hosts. Under certain situations,
+VMs from the same customer might be placed on the same host. hostId
+represents the host your server runs on and can be used to determine
+this scenario if it is relevant to your application.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">HostId is unique <em>per account</em> and is not globally unique.</p>
+</div>
+</div>
+<div class="section" id="server-creation">
+<h2>Server creation<a class="headerlink" href="#server-creation" title="Permalink to this headline">¶</a></h2>
+<p>Status Transition:</p>
+<p><tt class="docutils literal"><span class="pre">BUILD</span></tt></p>
+<p><tt class="docutils literal"><span class="pre">ACTIVE</span></tt></p>
+<p><tt class="docutils literal"><span class="pre">BUILD</span></tt></p>
+<p><tt class="docutils literal"><span class="pre">ERROR</span></tt> (on error)</p>
+<p>When you create a server, the operation asynchronously provisions a new
+server. The progress of this operation depends on several factors
+including location of the requested image, network I/O, host load, and
+the selected flavor. The progress of the request can be checked by
+performing a <strong>GET</strong> on /servers/<em>``id``</em>, which returns a progress
+attribute (from 0% to 100% complete). The full URL to the newly created
+server is returned through the <tt class="docutils literal"><span class="pre">Location</span></tt> header and is available as a
+<tt class="docutils literal"><span class="pre">self</span></tt> and <tt class="docutils literal"><span class="pre">bookmark</span></tt> link in the server representation. Note that
+when creating a server, only the server ID, its links, and the
+administrative password are guaranteed to be returned in the request.
+You can retrieve additional attributes by performing subsequent <strong>GET</strong>
+operations on the server.</p>
+</div>
+<div class="section" id="server-passwords">
+<h2>Server passwords<a class="headerlink" href="#server-passwords" title="Permalink to this headline">¶</a></h2>
+<p>You can specify a password when you create the server through the
+optional adminPass attribute. The specified password must meet the
+complexity requirements set by your OpenStack Compute provider. The
+server might enter an <tt class="docutils literal"><span class="pre">ERROR</span></tt> state if the complexity requirements are
+not met. In this case, a client can issue a change password action to
+reset the server password.</p>
+<p>If a password is not specified, a randomly generated password is
+assigned and returned in the response object. This password is
+guaranteed to meet the security requirements set by the compute
+provider. For security reasons, the password is not returned in
+subsequent <strong>GET</strong> calls.</p>
+</div>
+<div class="section" id="server-metadata">
+<h2>Server metadata<a class="headerlink" href="#server-metadata" title="Permalink to this headline">¶</a></h2>
+<p>Custom server metadata can also be supplied at launch time. The maximum
+size of the metadata key and value is 255 bytes each. The maximum number
+of key-value pairs that can be supplied per server is determined by the
+compute provider and may be queried via the maxServerMeta absolute
+limit.</p>
+</div>
+<div class="section" id="server-networks">
+<h2>Server networks<a class="headerlink" href="#server-networks" title="Permalink to this headline">¶</a></h2>
+<p>Networks to which the server connects can also be supplied at launch
+time. One or more networks can be specified. User can also specify a
+specific port on the network or the fixed IP address to assign to the
+server interface.</p>
+</div>
+<div class="section" id="server-personality">
+<h2>Server personality<a class="headerlink" href="#server-personality" title="Permalink to this headline">¶</a></h2>
+<p>You can customize the personality of a server instance by injecting data
+into its file system. For example, you might want to insert ssh keys,
+set configuration files, or store data that you want to retrieve from
+inside the instance. This feature provides a minimal amount of
+launch-time personalization. If you require significant customization,
+create a custom image.</p>
+<p>Follow these guidelines when you inject files:</p>
+<ul class="simple">
+<li>The maximum size of the file path data is 255 bytes.</li>
+<li>Encode the file contents as a Base64 string. The maximum size of the
+file contents is determined by the compute provider and may vary
+based on the image that is used to create the server</li>
+</ul>
+</div>
+<div class="section" id="considerations">
+<h2>Considerations<a class="headerlink" href="#considerations" title="Permalink to this headline">¶</a></h2>
+<blockquote>
+<div>The maximum limit refers to the number of bytes in the decoded data
+and not the number of characters in the encoded data.</div></blockquote>
+<ul class="simple">
+<li>You can inject text files only. You cannot inject binary or zip files
+into a new build.</li>
+<li>The maximum number of file path/content pairs that you can supply is
+also determined by the compute provider and is defined by the
+maxPersonality absolute limit.</li>
+<li>The absolute limit, maxPersonalitySize, is a byte limit that is
+guaranteed to apply to all images in the deployment. Providers can
+set additional per-image personality limits.</li>
+</ul>
+<p>The file injection might not occur until after the server is built and
+booted.</p>
+<p>During file injection, any existing files that match specified files are
+renamed to include the BAK extension appended with a time stamp. For
+example, if the <tt class="docutils literal"><span class="pre">/etc/passwd</span></tt> file exists, it is backed up as
+<tt class="docutils literal"><span class="pre">/etc/passwd.bak.1246036261.5785</span></tt>.</p>
+<p>After file injection, personality files are accessible by only system
+administrators. For example, on Linux, all files have root and the root
+group as the owner and group owner, respectively, and allow user and
+group read access only (octal 440).</p>
+</div>
+<div class="section" id="server-access-addresses">
+<h2>Server access addresses<a class="headerlink" href="#server-access-addresses" title="Permalink to this headline">¶</a></h2>
+<p>In a hybrid environment, the IP address of a server might not be
+controlled by the underlying implementation. Instead, the access IP
+address might be part of the dedicated hardware; for example, a
+router/NAT device. In this case, the addresses provided by the
+implementation cannot actually be used to access the server (from
+outside the local LAN). Here, a separate <em>access address</em> may be
+assigned at creation time to provide access to the server. This address
+may not be directly bound to a network interface on the server and may
+not necessarily appear when a server&#8217;s addresses are queried.
+Nonetheless, clients that must access the server directly are encouraged
+to do so via an access address. In the example below, an IPv4 address is
+assigned at creation time.</p>
+<p><strong>Example: Create server with access IP: JSON request</strong></p>
+<div class="code highlight-python"><div class="highlight"><pre><span></span><span class="p">{</span>
+   <span class="s2">&quot;server&quot;</span><span class="p">:{</span>
+      <span class="s2">&quot;name&quot;</span><span class="p">:</span><span class="s2">&quot;new-server-test&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;imageRef&quot;</span><span class="p">:</span><span class="s2">&quot;52415800-8b69-11e0-9b19-734f6f006e54&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;flavorRef&quot;</span><span class="p">:</span><span class="s2">&quot;52415800-8b69-11e0-9b19-734f1195ff37&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;accessIPv4&quot;</span><span class="p">:</span><span class="s2">&quot;67.23.10.132&quot;</span>
+   <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Both IPv4 and IPv6 addresses may be used as access addresses and both
+addresses may be assigned simultaneously as illustrated below. Access
+addresses may be updated after a server has been created.</p>
+</div>
+<p><strong>Example:&nbsp;Create server with multiple access IPs: JSON request</strong></p>
+<div class="code highlight-python"><div class="highlight"><pre><span></span><span class="p">{</span>
+   <span class="s2">&quot;server&quot;</span><span class="p">:{</span>
+      <span class="s2">&quot;name&quot;</span><span class="p">:</span><span class="s2">&quot;new-server-test&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;imageRef&quot;</span><span class="p">:</span><span class="s2">&quot;52415800-8b69-11e0-9b19-734f6f006e54&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;flavorRef&quot;</span><span class="p">:</span><span class="s2">&quot;52415800-8b69-11e0-9b19-734f1195ff37&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;accessIPv4&quot;</span><span class="p">:</span><span class="s2">&quot;67.23.10.132&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;accessIPv6&quot;</span><span class="p">:</span><span class="s2">&quot;::babe:67.23.10.132&quot;</span>
+   <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">Server concepts</a><ul>
+<li><a class="reference internal" href="#server-status">Server status</a></li>
+<li><a class="reference internal" href="#server-creation">Server creation</a></li>
+<li><a class="reference internal" href="#server-passwords">Server passwords</a></li>
+<li><a class="reference internal" href="#server-metadata">Server metadata</a></li>
+<li><a class="reference internal" href="#server-networks">Server networks</a></li>
+<li><a class="reference internal" href="#server-personality">Server personality</a></li>
+<li><a class="reference internal" href="#considerations">Considerations</a></li>
+<li><a class="reference internal" href="#server-access-addresses">Server access addresses</a></li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="2.0_general_info.html"
+                                  title="previous chapter">General Compute API v2.0 information</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="authentication.html"
+                                  title="next chapter">Authentication</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/v2/2.0_server_concepts.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="authentication.html" title="Authentication"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="2.0_general_info.html" title="General Compute API v2.0 information"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

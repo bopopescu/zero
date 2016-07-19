@@ -1,0 +1,466 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Testing NUMA related hardware setup with libvirt &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../../index.html" />
+    <link rel="up" title="Developer Guide" href="../index.html" />
+    <link rel="next" title="Testing Serial Console" href="serial-console.html" />
+    <link rel="prev" title="Development policies" href="../policies.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="testing-numa-related-hardware-setup-with-libvirt">
+<h1>Testing NUMA related hardware setup with libvirt<a class="headerlink" href="#testing-numa-related-hardware-setup-with-libvirt" title="Permalink to this headline">¶</a></h1>
+<p>This page describes how to test the libvirt driver&#8217;s handling
+of the NUMA placement, large page allocation and CPU pinning
+features. It relies on setting up a virtual machine as the
+test environment and requires support for nested virtualization
+since plain QEMU is not sufficiently functional. The virtual
+machine will itself be given NUMA topology, so it can then
+act as a virtual &#8220;host&#8221; for testing purposes.</p>
+<div class="section" id="provisioning-a-virtual-machine-for-testing">
+<h2>Provisioning a virtual machine for testing<a class="headerlink" href="#provisioning-a-virtual-machine-for-testing" title="Permalink to this headline">¶</a></h2>
+<p>The entire test process will take place inside a large virtual
+machine running Fedora 21. The instructions should work for any
+other Linux distribution which includes libvirt &gt;= 1.2.9 and
+QEMU &gt;= 2.1.2</p>
+<p>The tests will require support for nested KVM, which is not enabled
+by default on hypervisor hosts. It must be explicitly turned on in
+the host when loading the kvm-intel/kvm-amd kernel modules.</p>
+<p>On Intel hosts verify it with</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># cat /sys/module/kvm_intel/parameters/nested</span>
+N
+
+<span class="c1"># rmmod kvm-intel</span>
+<span class="c1"># echo &quot;options kvm-intel nested=y&quot; &gt; /etc/modprobe.d/dist.conf</span>
+<span class="c1"># modprobe kvm-intel</span>
+
+<span class="c1"># cat /sys/module/kvm_intel/parameters/nested</span>
+Y
+</pre></div>
+</div>
+<p>While on AMD hosts verify it with</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># cat /sys/module/kvm_amd/parameters/nested</span>
+0
+
+<span class="c1"># rmmod kvm-amd</span>
+<span class="c1"># echo &quot;options kvm-amd nested=1&quot; &gt; /etc/modprobe.d/dist.conf</span>
+<span class="c1"># modprobe kvm-amd</span>
+
+<span class="c1"># cat /sys/module/kvm_amd/parameters/nested</span>
+1
+</pre></div>
+</div>
+<p>The virt-install command below shows how to provision a
+basic Fedora 21 x86_64 guest with 8 virtual CPUs, 8 GB
+of RAM and 20 GB of disk space:</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># cd /var/lib/libvirt/images</span>
+<span class="c1"># wget http://download.fedoraproject.org/pub/fedora/linux/releases/test/21-Alpha/Server/x86_64/iso/Fedora-Server-netinst-x86_64-21_Alpha.iso</span>
+
+<span class="c1"># virt-install \</span>
+   --name f21x86_64 <span class="se">\</span>
+   --ram <span class="m">8000</span> <span class="se">\</span>
+   --vcpus <span class="m">8</span> <span class="se">\</span>
+   --file /var/lib/libvirt/images/f21x86_64.img <span class="se">\</span>
+   --file-size 20
+   --cdrom /var/lib/libvirt/images/Fedora-Server-netinst-x86_64-21_Alpha.iso <span class="se">\</span>
+   --os-variant fedora20
+</pre></div>
+</div>
+<p>When the virt-viewer application displays the installer, follow
+the defaults for the installation with a couple of exceptions</p>
+<ul class="simple">
+<li>The automatic disk partition setup can be optionally tweaked to
+reduce the swap space allocated. No more than 500MB is required,
+free&#8217;ing up an extra 1.5 GB for the root disk.</li>
+<li>Select &#8220;Minimal install&#8221; when asked for the installation type
+since a desktop environment is not required.</li>
+<li>When creating a user account be sure to select the option
+&#8220;Make this user administrator&#8221; so it gets &#8216;sudo&#8217; rights</li>
+</ul>
+<p>Once the installation process has completed, the virtual machine
+will reboot into the final operating system. It is now ready to
+deploy an OpenStack development environment.</p>
+</div>
+<div class="section" id="setting-up-a-devstack-environment">
+<h2>Setting up a devstack environment<a class="headerlink" href="#setting-up-a-devstack-environment" title="Permalink to this headline">¶</a></h2>
+<p>For later ease of use, copy your SSH public key into the virtual
+machine</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># ssh-copy-id  &lt;IP of VM&gt;</span>
+</pre></div>
+</div>
+<p>Now login to the virtual machine</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># ssh &lt;IP of VM&gt;</span>
+</pre></div>
+</div>
+<p>We&#8217;ll install devstack under $HOME/src/cloud/.</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># mkdir -p $HOME/src/cloud</span>
+<span class="c1"># cd $HOME/src/cloud</span>
+<span class="c1"># chmod go+rx $HOME</span>
+</pre></div>
+</div>
+<p>The Fedora minimal install does not contain git and only
+has the crude &amp; old-fashioned &#8220;vi&#8221; editor.</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># sudo yum -y install git emacs</span>
+</pre></div>
+</div>
+<p>At this point a fairly standard devstack setup can be
+done. The config below is just an example that is
+convenient to use to place everything in $HOME instead
+of /opt/stack. Change the IP addresses to something
+appropriate for your environment of course</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># git clone git://github.com/openstack-dev/devstack.git</span>
+<span class="c1"># cd devstack</span>
+<span class="c1"># cat &gt;&gt;local.conf &lt;&lt;EOF</span>
+<span class="o">[[</span>local<span class="p">|</span>localrc<span class="o">]]</span>
+<span class="nv">DEST</span><span class="o">=</span><span class="nv">$HOME</span>/src/cloud
+<span class="nv">DATA_DIR</span><span class="o">=</span><span class="nv">$DEST</span>/data
+<span class="nv">SERVICE_DIR</span><span class="o">=</span><span class="nv">$DEST</span>/status
+
+<span class="nv">LOGFILE</span><span class="o">=</span><span class="nv">$DATA_DIR</span>/logs/stack.log
+<span class="nv">SCREEN_LOGDIR</span><span class="o">=</span><span class="nv">$DATA_DIR</span>/logs
+<span class="nv">VERBOSE</span><span class="o">=</span>True
+
+disable_service neutron
+
+<span class="nv">HOST_IP</span><span class="o">=</span>192.168.122.50
+<span class="nv">FLAT_INTERFACE</span><span class="o">=</span>eth0
+<span class="nv">FIXED_RANGE</span><span class="o">=</span>192.168.128.0/24
+<span class="nv">FIXED_NETWORK_SIZE</span><span class="o">=</span>256
+<span class="nv">FLOATING_RANGE</span><span class="o">=</span>192.168.129.0/24
+
+<span class="nv">MYSQL_PASSWORD</span><span class="o">=</span>123456
+<span class="nv">SERVICE_TOKEN</span><span class="o">=</span>123456
+<span class="nv">SERVICE_PASSWORD</span><span class="o">=</span>123456
+<span class="nv">ADMIN_PASSWORD</span><span class="o">=</span>123456
+<span class="nv">RABBIT_PASSWORD</span><span class="o">=</span>123456
+
+<span class="nv">IMAGE_URLS</span><span class="o">=</span><span class="s2">&quot;http://download.cirros-cloud.net/0.3.2/cirros-0.3.2-x86_64-uec.tar.gz&quot;</span>
+EOF
+
+<span class="c1"># FORCE=yes ./stack.sh</span>
+</pre></div>
+</div>
+<p>Unfortunately while devstack starts various system services and
+changes various system settings it doesn&#8217;t make the changes
+persistent. Fix that now to avoid later surprises after reboots</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># sudo systemctl enable mysqld.service</span>
+<span class="c1"># sudo systemctl enable rabbitmq-server.service</span>
+<span class="c1"># sudo systemctl enable httpd.service</span>
+
+<span class="c1"># sudo emacs /etc/sysconfig/selinux</span>
+<span class="nv">SELINUX</span><span class="o">=</span>permissive
+</pre></div>
+</div>
+</div>
+<div class="section" id="testing-basis-non-numa-usage">
+<h2>Testing basis non-NUMA usage<a class="headerlink" href="#testing-basis-non-numa-usage" title="Permalink to this headline">¶</a></h2>
+<p>First to confirm we&#8217;ve not done anything unusual to the traditional
+operation of Nova libvirt guests boot a tiny instance</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># . openrc admin admin</span>
+<span class="c1"># nova boot --image cirros-0.3.2-x86_64-uec --flavor m1.tiny cirros1</span>
+</pre></div>
+</div>
+<p>The host will be reporting NUMA topology, but there should only
+be a single NUMA cell this point.</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># mysql -u root -p nova</span>
+MariaDB <span class="o">[</span>nova<span class="o">]</span>&gt; <span class="k">select</span> numa_topology from compute_nodes<span class="p">;</span>
++------------------------------------------------------------------------------------------------------+
+<span class="p">|</span> numa_topology                                                                                        <span class="p">|</span>
++------------------------------------------------------------------------------------------------------+
+<span class="p">|</span> <span class="o">{</span><span class="s2">&quot;cells&quot;</span>: <span class="o">[{</span><span class="s2">&quot;mem&quot;</span>: <span class="o">{</span><span class="s2">&quot;total&quot;</span>: 7794, <span class="s2">&quot;used&quot;</span>: 0<span class="o">}</span>, <span class="s2">&quot;cpu_usage&quot;</span>: 0, <span class="s2">&quot;cpus&quot;</span>: <span class="s2">&quot;0,1,2,3,4,5,6,7&quot;</span>, <span class="s2">&quot;id&quot;</span>: 0<span class="o">}]}</span> <span class="p">|</span>
++------------------------------------------------------------------------------------------------------+
+</pre></div>
+</div>
+<p>Meanwhile, the guest instance should not have any NUMA configuration
+recorded</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span>MariaDB <span class="o">[</span>nova<span class="o">]</span>&gt; <span class="k">select</span> numa_topology from instance_extra<span class="p">;</span>
++---------------+
+<span class="p">|</span> numa_topology <span class="p">|</span>
++---------------+
+<span class="p">|</span> NULL          <span class="p">|</span>
++---------------+
+</pre></div>
+</div>
+</div>
+<div class="section" id="reconfiguring-the-test-instance-to-have-numa-topology">
+<h2>Reconfiguring the test instance to have NUMA topology<a class="headerlink" href="#reconfiguring-the-test-instance-to-have-numa-topology" title="Permalink to this headline">¶</a></h2>
+<p>Now that devstack is proved operational, it is time to configure some
+NUMA topology for the test VM, so that it can be used to verify the
+OpenStack NUMA support. To do the changes, the VM instance that is running
+devstack must be shut down.</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># sudo shutdown -h now</span>
+</pre></div>
+</div>
+<p>And now back on the physical host edit the guest config as root</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># sudo virsh edit f21x86_64</span>
+</pre></div>
+</div>
+<p>The first thing is to change the &lt;cpu&gt; block to do passthrough of the
+host CPU. In particular this exposes the &#8220;SVM&#8221; or &#8220;VMX&#8221; feature bits
+to the guest so that &#8220;Nested KVM&#8221; can work. At the same time we want
+to define the NUMA topology of the guest. To make things interesting
+we&#8217;re going to give the guest an asymmetric topology with 4 CPUS and
+4 GBs of RAM in the first NUMA node and 2 CPUs and 2 GB of RAM in
+the second and third NUMA nodes. So modify the guest XML to include
+the following CPU XML</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span>&lt;cpu <span class="nv">mode</span><span class="o">=</span><span class="s1">&#39;host-passthrough&#39;</span>&gt;
+  &lt;numa&gt;
+    &lt;cell <span class="nv">id</span><span class="o">=</span><span class="s1">&#39;0&#39;</span> <span class="nv">cpus</span><span class="o">=</span><span class="s1">&#39;0-3&#39;</span> <span class="nv">memory</span><span class="o">=</span><span class="s1">&#39;4096000&#39;</span>/&gt;
+    &lt;cell <span class="nv">id</span><span class="o">=</span><span class="s1">&#39;1&#39;</span> <span class="nv">cpus</span><span class="o">=</span><span class="s1">&#39;4-5&#39;</span> <span class="nv">memory</span><span class="o">=</span><span class="s1">&#39;2048000&#39;</span>/&gt;
+    &lt;cell <span class="nv">id</span><span class="o">=</span><span class="s1">&#39;2&#39;</span> <span class="nv">cpus</span><span class="o">=</span><span class="s1">&#39;6-7&#39;</span> <span class="nv">memory</span><span class="o">=</span><span class="s1">&#39;2048000&#39;</span>/&gt;
+  &lt;/numa&gt;
+&lt;/cpu&gt;
+</pre></div>
+</div>
+<p>The guest can now be started again, and ssh back into it</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span> <span class="c1"># virsh start f21x86_64</span>
+
+...wait <span class="k">for</span> it to finish booting
+
+ <span class="c1"># ssh &lt;IP of VM&gt;</span>
+</pre></div>
+</div>
+<p>Before starting OpenStack services again, it is necessary to
+reconfigure Nova to enable the NUMA schedular filter. The libvirt
+virtualization type must also be explicitly set to KVM, so that
+guests can take advantage of nested KVM.</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># sudo emacs /etc/nova/nova.conf</span>
+</pre></div>
+</div>
+<p>Set the following parameters:</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="o">[</span>DEFAULT<span class="o">]</span>
+<span class="nv">scheduler_default_filters</span><span class="o">=</span>RetryFilter, AvailabilityZoneFilter, RamFilter, ComputeFilter, ComputeCapabilitiesFilter, ImagePropertiesFilter, ServerGroupAntiAffinityFilter,ServerGroupAffinityFilter, NUMATopologyFilter
+
+<span class="o">[</span>libvirt<span class="o">]</span>
+<span class="nv">virt_type</span> <span class="o">=</span> kvm
+</pre></div>
+</div>
+<p>With that done, OpenStack can be started again</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># cd $HOME/src/cloud/devstack</span>
+<span class="c1"># ./rejoin-stack.sh</span>
+</pre></div>
+</div>
+<p>The first thing is to check that the compute node picked up the
+new NUMA topology setup for the guest</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># mysql -u root -p nova</span>
+MariaDB <span class="o">[</span>nova<span class="o">]</span>&gt; <span class="k">select</span> numa_topology from compute_nodes<span class="p">;</span>
++--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+<span class="p">|</span> numa_topology                                                                                                                                                                                                                                          <span class="p">|</span>
++--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+<span class="p">|</span> <span class="o">{</span><span class="s2">&quot;cells&quot;</span>: <span class="o">[{</span><span class="s2">&quot;mem&quot;</span>: <span class="o">{</span><span class="s2">&quot;total&quot;</span>: 3857, <span class="s2">&quot;used&quot;</span>: 0<span class="o">}</span>, <span class="s2">&quot;cpu_usage&quot;</span>: 0, <span class="s2">&quot;cpus&quot;</span>: <span class="s2">&quot;0,1,2,3&quot;</span>, <span class="s2">&quot;id&quot;</span>: 0<span class="o">}</span>, <span class="o">{</span><span class="s2">&quot;mem&quot;</span>: <span class="o">{</span><span class="s2">&quot;total&quot;</span>: 1969, <span class="s2">&quot;used&quot;</span>: 0<span class="o">}</span>, <span class="s2">&quot;cpu_usage&quot;</span>: 0, <span class="s2">&quot;cpus&quot;</span>: <span class="s2">&quot;4,5&quot;</span>, <span class="s2">&quot;id&quot;</span>: 1<span class="o">}</span>, <span class="o">{</span><span class="s2">&quot;mem&quot;</span>: <span class="o">{</span><span class="s2">&quot;total&quot;</span>: 1967, <span class="s2">&quot;used&quot;</span>: 0<span class="o">}</span>, <span class="s2">&quot;cpu_usage&quot;</span>: 0, <span class="s2">&quot;cpus&quot;</span>: <span class="s2">&quot;6,7&quot;</span>, <span class="s2">&quot;id&quot;</span>: 2<span class="o">}]}</span> <span class="p">|</span>
++--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+</pre></div>
+</div>
+<p>This indeed shows that there are now 3 NUMA nodes for the &#8220;host&#8221;
+machine, the first with 4 GB of RAM and 4 CPUs, and others with
+2 GB of RAM and 2 CPUs each.</p>
+</div>
+<div class="section" id="testing-instance-boot-with-no-numa-topology-requested">
+<h2>Testing instance boot with no NUMA topology requested<a class="headerlink" href="#testing-instance-boot-with-no-numa-topology-requested" title="Permalink to this headline">¶</a></h2>
+<p>For the sake of backwards compatibility, if the NUMA filter is
+enabled, but the flavor/image does not have any NUMA settings
+requested, it should be assumed that the guest will have a
+single NUMA node. The guest should be locked to a single host
+NUMA node too. Boot a guest with the m1.tiny flavor to test
+this condition</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># . openrc admin admin</span>
+<span class="c1"># nova boot --image cirros-0.3.2-x86_64-uec --flavor m1.tiny cirros1</span>
+</pre></div>
+</div>
+<p>Now look at the libvirt guest XML. It should show that the vCPUs are
+locked to pCPUs within a particular node.</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># virsh -c qemu:///system list</span>
+....
+<span class="c1"># virsh -c qemu:///system dumpxml instanceXXXXXX</span>
+...
+&lt;vcpu <span class="nv">placement</span><span class="o">=</span><span class="s1">&#39;static&#39;</span> <span class="nv">cpuset</span><span class="o">=</span><span class="s1">&#39;6-7&#39;</span>&gt;1&lt;/vcpu&gt;
+...
+</pre></div>
+</div>
+<p>This example shows that the guest has been locked to the 3rd NUMA
+node (which contains pCPUs 6 and 7). Note that there is no explicit
+NUMA topology listed in the guest XML.</p>
+</div>
+<div class="section" id="testing-instance-boot-with-1-numa-cell-requested">
+<h2>Testing instance boot with 1 NUMA cell requested<a class="headerlink" href="#testing-instance-boot-with-1-numa-cell-requested" title="Permalink to this headline">¶</a></h2>
+<p>Moving forward a little, explicitly tell Nova that the NUMA topology
+for the guest should have a single NUMA node. This should operate
+in an identical manner to the default behaviour where no NUMA policy
+is set. To define the topology we will create a new flavor</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># nova flavor-create m1.numa 999 1024 1 4</span>
+<span class="c1"># nova flavor-key m1.numa set hw:numa_nodes=1</span>
+<span class="c1"># nova flavor-show m1.numa</span>
+</pre></div>
+</div>
+<p>Now boot the guest using this new flavor</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># nova boot --image cirros-0.3.2-x86_64-uec --flavor m1.numa cirros2</span>
+</pre></div>
+</div>
+<p>Looking at the resulting guest XML from libvirt</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span><span class="c1"># virsh -c qemu:///system dumpxml instanceXXXXXX</span>
+...
+&lt;vcpu <span class="nv">placement</span><span class="o">=</span><span class="s1">&#39;static&#39;</span>&gt;4&lt;/vcpu&gt;
+&lt;cputune&gt;
+  &lt;vcpupin <span class="nv">vcpu</span><span class="o">=</span><span class="s1">&#39;0&#39;</span> <span class="nv">cpuset</span><span class="o">=</span><span class="s1">&#39;0-3&#39;</span>/&gt;
+  &lt;vcpupin <span class="nv">vcpu</span><span class="o">=</span><span class="s1">&#39;1&#39;</span> <span class="nv">cpuset</span><span class="o">=</span><span class="s1">&#39;0-3&#39;</span>/&gt;
+  &lt;vcpupin <span class="nv">vcpu</span><span class="o">=</span><span class="s1">&#39;2&#39;</span> <span class="nv">cpuset</span><span class="o">=</span><span class="s1">&#39;0-3&#39;</span>/&gt;
+  &lt;vcpupin <span class="nv">vcpu</span><span class="o">=</span><span class="s1">&#39;3&#39;</span> <span class="nv">cpuset</span><span class="o">=</span><span class="s1">&#39;0-3&#39;</span>/&gt;
+  &lt;emulatorpin <span class="nv">cpuset</span><span class="o">=</span><span class="s1">&#39;0-3&#39;</span>/&gt;
+&lt;/cputune&gt;
+...
+&lt;cpu&gt;
+  &lt;topology <span class="nv">sockets</span><span class="o">=</span><span class="s1">&#39;4&#39;</span> <span class="nv">cores</span><span class="o">=</span><span class="s1">&#39;1&#39;</span> <span class="nv">threads</span><span class="o">=</span><span class="s1">&#39;1&#39;</span>/&gt;
+  &lt;numa&gt;
+    &lt;cell <span class="nv">id</span><span class="o">=</span><span class="s1">&#39;0&#39;</span> <span class="nv">cpus</span><span class="o">=</span><span class="s1">&#39;0-1&#39;</span> <span class="nv">memory</span><span class="o">=</span><span class="s1">&#39;524288&#39;</span>/&gt;
+    &lt;cell <span class="nv">id</span><span class="o">=</span><span class="s1">&#39;1&#39;</span> <span class="nv">cpus</span><span class="o">=</span><span class="s1">&#39;2-3&#39;</span> <span class="nv">memory</span><span class="o">=</span><span class="s1">&#39;524288&#39;</span>/&gt;
+  &lt;/numa&gt;
+&lt;/cpu&gt;
+...
+&lt;numatune&gt;
+  &lt;memory <span class="nv">mode</span><span class="o">=</span><span class="s1">&#39;strict&#39;</span> <span class="nv">nodeset</span><span class="o">=</span><span class="s1">&#39;0-1&#39;</span>/&gt;
+  &lt;memnode <span class="nv">cellid</span><span class="o">=</span><span class="s1">&#39;0&#39;</span> <span class="nv">mode</span><span class="o">=</span><span class="s1">&#39;strict&#39;</span> <span class="nv">nodeset</span><span class="o">=</span><span class="s1">&#39;0&#39;</span>/&gt;
+  &lt;memnode <span class="nv">cellid</span><span class="o">=</span><span class="s1">&#39;1&#39;</span> <span class="nv">node</span><span class="o">=</span><span class="s1">&#39;strict&#39;</span> <span class="nv">nodeset</span><span class="o">=</span><span class="s1">&#39;1&#39;</span>/&gt;
+&lt;/numatune&gt;
+</pre></div>
+</div>
+<p>The XML shows:</p>
+<ul class="simple">
+<li>Each guest CPU has been pinned to the physical CPUs
+associated with a particular NUMA node</li>
+<li>The emulator threads have been pinned to the union
+of all physical CPUs in the host NUMA nodes that
+the guest is placed on</li>
+<li>The guest has been given a virtual NUMA topology
+splitting RAM and CPUs symmetrically</li>
+<li>Each guest NUMA node has been strictly pinned to
+a host NUMA node.</li>
+</ul>
+<p>As a further sanity test, check what Nova recorded for the
+instance in the database. This should match the &lt;numatune&gt;
+information</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span>MariaDB <span class="o">[</span>nova<span class="o">]</span>&gt; <span class="k">select</span> numa_topology from instance_extra<span class="p">;</span>
++---------------------------------------------------------------------------------------------------------------+
+<span class="p">|</span> numa_topology                                                                                                 <span class="p">|</span>
++---------------------------------------------------------------------------------------------------------------+
+<span class="p">|</span> <span class="o">{</span><span class="s2">&quot;cells&quot;</span>: <span class="o">[{</span><span class="s2">&quot;mem&quot;</span>: <span class="o">{</span><span class="s2">&quot;total&quot;</span>: 512<span class="o">}</span>, <span class="s2">&quot;cpus&quot;</span>: <span class="s2">&quot;0,1&quot;</span>, <span class="s2">&quot;id&quot;</span>: 0<span class="o">}</span>, <span class="o">{</span><span class="s2">&quot;mem&quot;</span>: <span class="o">{</span><span class="s2">&quot;total&quot;</span>: 512<span class="o">}</span>, <span class="s2">&quot;cpus&quot;</span>: <span class="s2">&quot;2,3&quot;</span>, <span class="s2">&quot;id&quot;</span>: 1<span class="o">}]}</span> <span class="p">|</span>
++---------------------------------------------------------------------------------------------------------------+
+</pre></div>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">Testing NUMA related hardware setup with libvirt</a><ul>
+<li><a class="reference internal" href="#provisioning-a-virtual-machine-for-testing">Provisioning a virtual machine for testing</a></li>
+<li><a class="reference internal" href="#setting-up-a-devstack-environment">Setting up a devstack environment</a></li>
+<li><a class="reference internal" href="#testing-basis-non-numa-usage">Testing basis non-NUMA usage</a></li>
+<li><a class="reference internal" href="#reconfiguring-the-test-instance-to-have-numa-topology">Reconfiguring the test instance to have NUMA topology</a></li>
+<li><a class="reference internal" href="#testing-instance-boot-with-no-numa-topology-requested">Testing instance boot with no NUMA topology requested</a></li>
+<li><a class="reference internal" href="#testing-instance-boot-with-1-numa-cell-requested">Testing instance boot with 1 NUMA cell requested</a></li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="../policies.html"
+                                  title="previous chapter">Development policies</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="serial-console.html"
+                                  title="next chapter">Testing Serial Console</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../../_sources/devref/testing/libvirt-numa.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="serial-console.html" title="Testing Serial Console"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="../policies.html" title="Development policies"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../../index.html">nova 23.fc23 documentation</a> &raquo;</li>
+          <li><a href="../index.html" accesskey="U">Developer Guide</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

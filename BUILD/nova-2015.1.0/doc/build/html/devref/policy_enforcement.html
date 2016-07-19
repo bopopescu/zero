@@ -1,0 +1,276 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Rest API Policy Enforcement &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="up" title="Developer Guide" href="index.html" />
+    <link rel="next" title="Blueprints in Kilo" href="kilo.blueprints.html" />
+    <link rel="prev" title="Upgrades" href="upgrade.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="rest-api-policy-enforcement">
+<h1>Rest API Policy Enforcement<a class="headerlink" href="#rest-api-policy-enforcement" title="Permalink to this headline">¶</a></h1>
+<p>Here is a vision of how we want policy to be enforced in nova.</p>
+<div class="section" id="problems-with-current-system">
+<h2>Problems with current system<a class="headerlink" href="#problems-with-current-system" title="Permalink to this headline">¶</a></h2>
+<p>There are several problems for current API policy.</p>
+<ul class="simple">
+<li>The permission checking is spread through the various levels of the nova
+code, also there are some hard-coded permission checks that make some
+policies not enforceable.</li>
+<li>API policy rules need better granularity. Some of extensions just use one
+rule for all the APIs. Deployer can&#8217;t get better granularity control for
+the APIs.</li>
+<li>More easy way to override default policy settings for deployer. And
+Currently all the API(EC2, V2, V2.1) rules mix in one policy.conf file.</li>
+</ul>
+<p>These are the kinds of things we need to make easier:</p>
+<p>1. Operator wants to enable a specific role to access the service API which
+is not possible because there is currently a hard coded admin check.</p>
+<p>2. One policy rule per API action. Having a check in the REST API and a
+redundant check in the compute API can confuse developers and deployers.</p>
+<ol class="arabic simple" start="3">
+<li>Operator can specify different rules for APIs that in same extension.</li>
+</ol>
+<p>4. Operator can override the default policy rule easily without mixing his own
+config and default config in one policy.conf file.</p>
+</div>
+<div class="section" id="future-of-policy-enforcement">
+<h2>Future of policy enforcement<a class="headerlink" href="#future-of-policy-enforcement" title="Permalink to this headline">¶</a></h2>
+<p>The generic rule for all the improvement is keep V2 API back-compatible.
+Because V2 API may be deprecated after V2.1 parity with V2. This can reduce
+the risk we taked. The improvement just for EC2 and V2.1 API. There isn&#8217;t
+any user for V2.1, as it isn&#8217;t ready yet. We have to do change for EC2 API.
+EC2 API won&#8217;t be removed like v2 API. If we keep back-compatible for EC2 API
+also, the old compute api layer checks won&#8217;t be removed forever. EC2 API is
+really small than Nova API. It&#8217;s about 29 APIs without volume and image
+related(those policy check done by cinder and glance). So it will affect user
+less.</p>
+<div class="section" id="enforcement-policy-at-rest-api-layer">
+<h3>Enforcement policy at REST API layer<a class="headerlink" href="#enforcement-policy-at-rest-api-layer" title="Permalink to this headline">¶</a></h3>
+<p>The policy should be only enforced at REST API layer. This is clear for user
+to know where the policy will be enforced. If the policy spread into multiple
+layer of nova code, user won&#8217;t know when and where the policy will be enforced
+if they didn&#8217;t have knowledge about nova code.</p>
+<p>Remove all the permission checking under REST API layer. Policy will only be
+enforced at REST API layer.</p>
+<p>This will affect the EC2 API and V2.1 API, there are some API just have policy
+enforcement at Compute/Network API layer, those policy will be move to API
+layer and renamed.</p>
+</div>
+<div class="section" id="removes-hard-code-permission-checks">
+<h3>Removes hard-code permission checks<a class="headerlink" href="#removes-hard-code-permission-checks" title="Permalink to this headline">¶</a></h3>
+<p>Hard-coded permission checks make it impossible to supply a configurable
+policy. They should be removed in order to make nova auth completely
+configurable.</p>
+<p>This will affect EC2 API and Nova V2.1 API. User need update their policy
+rule to match the old hard-code permission.</p>
+<p>For Nova V2 API, the hard-code permission checks will be moved to REST API
+layer to guarantee it won&#8217;t break the back-compatibility. That may ugly
+some hard-code permission check in API layer, but V2 API will be removed
+once V2.1 API ready, so our choice will reduce the risk.</p>
+</div>
+<div class="section" id="port-policy-d-from-oslo-incubator-into-nova">
+<h3>Port policy.d from oslo-incubator into nova<a class="headerlink" href="#port-policy-d-from-oslo-incubator-into-nova" title="Permalink to this headline">¶</a></h3>
+<p>This feature make deployer can override default policy rule easily. And
+When nova default policy config changed, deployer only need replace default
+policy config files with new one. It won&#8217;t affect his own policy config in
+other files.</p>
+</div>
+<div class="section" id="use-different-prefix-in-policy-rule-name-for-ec2-v2-v2-1-api">
+<h3>Use different prefix in policy rule name for EC2/V2/V2.1 API<a class="headerlink" href="#use-different-prefix-in-policy-rule-name-for-ec2-v2-v2-1-api" title="Permalink to this headline">¶</a></h3>
+<p>Currently all the APIs(Nova v2/v2.1 API, EC2 API) use same set of policy
+rules. Espcially there isn&#8217;t obvious mapping between those policy rules
+and EC2 API. User can know clearly which policy should be configured for
+specific API.</p>
+<p>Nova should provide different prefix for policy rule name that used to
+group them, and put them in different policy configure file in policy.d</p>
+<blockquote>
+<div><ul class="simple">
+<li>EC2 API: Use prefix &#8220;ec2_api&#8221;. The rule looks like &#8220;ec2_api:[action]&#8221;</li>
+<li>Nova V2 API: After we move to V2.1, we needn&#8217;t spend time to change V2
+api rule, and needn&#8217;t to bother deployer upgrade their policy config. So
+just keep V2 API poicy rule named as before.</li>
+<li>Nova V2.1 API: We name the policy rule as
+&#8220;os_compute_api:[extension]:[action]&#8221;. The core API may be changed in
+the future, so we needn&#8217;t name them as &#8220;compute&#8221; or &#8220;compute_extension&#8221;
+to distinguish the core or extension API.</li>
+</ul>
+</div></blockquote>
+<p>This will affect EC2 API and V2.1 API. For EC2 API, it need deployer update
+their policy config. For V2.1 API, there isn&#8217;t any user yet, so there won&#8217;t
+any effect.</p>
+</div>
+<div class="section" id="group-the-policy-rules-into-different-policy-files">
+<h3>Group the policy rules into different policy files<a class="headerlink" href="#group-the-policy-rules-into-different-policy-files" title="Permalink to this headline">¶</a></h3>
+<p>After group the policy rules for different API, we can separate them into
+different files. Then deployer will more clear for which rule he can set for
+specific API. The rules can be grouped as below:</p>
+<blockquote>
+<div><ul class="simple">
+<li>policy.conf: It only contains the generic rule, like:</li>
+</ul>
+</div></blockquote>
+<dl class="docutils">
+<dt>::</dt>
+<dd><blockquote class="first">
+<div>&#8220;context_is_admin&#8221;:  &#8220;role:admin&#8221;,
+&#8220;admin_or_owner&#8221;:  &#8220;is_admin:True or project_id:%(project_id)s&#8221;,
+&#8220;default&#8221;: &#8220;rule:admin_or_owner&#8221;,</div></blockquote>
+<ul class="last simple">
+<li>policy.d/00-ec2-api.conf: It contains all the policy rules for EC2 API.</li>
+<li>policy.d/00-v2-api.conf: It contains all the policy rules for nova V2 API.</li>
+<li>policy.d/00-v2.1-api.conf: It contains all the policy rules for nova v2.1
+API.</li>
+</ul>
+</dd>
+</dl>
+<p>The prefix &#8216;00-&#8216; is used to order the configure file. All the files in
+policy.d will be loaded by alphabetical order. &#8216;00-&#8216; means those files will
+be loaded very early.</p>
+</div>
+<div class="section" id="add-separated-rule-for-each-api-in-extension">
+<h3>Add separated rule for each API in extension<a class="headerlink" href="#add-separated-rule-for-each-api-in-extension" title="Permalink to this headline">¶</a></h3>
+<p>This is for provider better granularity for policy rules. Not just provide
+policy rule for extension as unit.</p>
+<p>This need user to move the policy rule into separated rule for each API.</p>
+</div>
+<div class="section" id="enable-action-level-rule-override-extension-level-rule">
+<h3>Enable action level rule override extension level rule<a class="headerlink" href="#enable-action-level-rule-override-extension-level-rule" title="Permalink to this headline">¶</a></h3>
+<p>After separated rule for each API in extension, that will increase the work
+for deployer. So enable extension level rule as default for each API in that
+extension will ease that a lot. Deployer also can specify one rule for each
+API to override the extension level rule.</p>
+</div>
+</div>
+<div class="section" id="existed-nova-api-being-restricted">
+<h2>Existed Nova API being restricted<a class="headerlink" href="#existed-nova-api-being-restricted" title="Permalink to this headline">¶</a></h2>
+<p>Nova provide default policy rules for all the APIs. Operator should only make
+the policy rule more permissive. If the Operator make the API to be restricted
+that make break the existed API user or application. That&#8217;s kind of
+back-incompatible. SO Operator can free to add additional permission to the
+existed API.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">Rest API Policy Enforcement</a><ul>
+<li><a class="reference internal" href="#problems-with-current-system">Problems with current system</a></li>
+<li><a class="reference internal" href="#future-of-policy-enforcement">Future of policy enforcement</a><ul>
+<li><a class="reference internal" href="#enforcement-policy-at-rest-api-layer">Enforcement policy at REST API layer</a></li>
+<li><a class="reference internal" href="#removes-hard-code-permission-checks">Removes hard-code permission checks</a></li>
+<li><a class="reference internal" href="#port-policy-d-from-oslo-incubator-into-nova">Port policy.d from oslo-incubator into nova</a></li>
+<li><a class="reference internal" href="#use-different-prefix-in-policy-rule-name-for-ec2-v2-v2-1-api">Use different prefix in policy rule name for EC2/V2/V2.1 API</a></li>
+<li><a class="reference internal" href="#group-the-policy-rules-into-different-policy-files">Group the policy rules into different policy files</a></li>
+<li><a class="reference internal" href="#add-separated-rule-for-each-api-in-extension">Add separated rule for each API in extension</a></li>
+<li><a class="reference internal" href="#enable-action-level-rule-override-extension-level-rule">Enable action level rule override extension level rule</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#existed-nova-api-being-restricted">Existed Nova API being restricted</a></li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="upgrade.html"
+                                  title="previous chapter">Upgrades</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="kilo.blueprints.html"
+                                  title="next chapter">Blueprints in Kilo</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/devref/policy_enforcement.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="kilo.blueprints.html" title="Blueprints in Kilo"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="upgrade.html" title="Upgrades"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Developer Guide</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

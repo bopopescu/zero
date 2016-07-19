@@ -1,0 +1,47 @@
+From d70429f2dc94f2221556a0d20c7f8c1d343fe640 Mon Sep 17 00:00:00 2001
+From: Gary Kotton <gkotton@vmware.com>
+Date: Sun, 22 Mar 2015 05:17:00 -0700
+Subject: [PATCH] VMware: add VirtualVmxnet3 to the supported network types
+
+Add VirtualVmxnet3 to the supported network models.
+
+(cherry picked from commit 92a9a76e5a3aebef740d4da67eec14360bf64440)
+(cherry picked from commit 14d3b59f334f52cdf7b0ac25b4b0a5808bd1b24a)
+
+Upstream-juno: https://review.openstack.org/#/c/178072/
+Resolves: rhbz#1211147
+Change-Id: I97147f8e0f749ee76f17569191e45eb520f7c88f
+Reviewed-on: https://code.engineering.redhat.com/gerrit/47052
+Reviewed-by: Victor Stinner <vstinner@redhat.com>
+Tested-by: RHOS Jenkins <apevec+rhosci@redhat.com>
+---
+ nova/tests/unit/virt/vmwareapi/test_vm_util.py | 2 +-
+ nova/virt/vmwareapi/vm_util.py                 | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/nova/tests/unit/virt/vmwareapi/test_vm_util.py b/nova/tests/unit/virt/vmwareapi/test_vm_util.py
+index 6209266..3057e73 100644
+--- a/nova/tests/unit/virt/vmwareapi/test_vm_util.py
++++ b/nova/tests/unit/virt/vmwareapi/test_vm_util.py
+@@ -799,7 +799,7 @@ class VMwareVMUtilTestCase(test.NoDBTestCase):
+         result = vm_util.convert_vif_model(network_model.VIF_MODEL_E1000E)
+         self.assertEqual(expected, result)
+         types = ["VirtualE1000", "VirtualE1000e", "VirtualPCNet32",
+-                 "VirtualVmxnet"]
++                 "VirtualVmxnet", "VirtualVmxnet3"]
+         for type in types:
+             self.assertEqual(type,
+                              vm_util.convert_vif_model(type))
+diff --git a/nova/virt/vmwareapi/vm_util.py b/nova/virt/vmwareapi/vm_util.py
+index 48e9247..8c48fd4 100644
+--- a/nova/virt/vmwareapi/vm_util.py
++++ b/nova/virt/vmwareapi/vm_util.py
+@@ -41,7 +41,7 @@ LOG = logging.getLogger(__name__)
+ 
+ ALL_SUPPORTED_NETWORK_DEVICES = ['VirtualE1000', 'VirtualE1000e',
+                                  'VirtualPCNet32', 'VirtualSriovEthernetCard',
+-                                 'VirtualVmxnet']
++                                 'VirtualVmxnet', 'VirtualVmxnet3']
+ 
+ # A cache for VM references. The key will be the VM name
+ # and the value is the VM reference. The VM name is unique. This

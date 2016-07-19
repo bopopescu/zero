@@ -1,0 +1,252 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Limits &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="next" title="Links and references" href="links_and_references.html" />
+    <link rel="prev" title="Compute API v2" href="index.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="limits">
+<h1>Limits<a class="headerlink" href="#limits" title="Permalink to this headline">¶</a></h1>
+<p>Accounts may be pre-configured with a set of thresholds (or limits) to
+manage capacity and prevent abuse of the system. The system recognizes
+two kinds of limits: <em>rate limits</em> and <em>absolute limits</em>. Rate limits
+are thresholds that are reset after a certain amount of time passes.
+Absolute limits are fixed. Limits are configured by operators and may
+differ from one deployment of the OpenStack Compute service to
+another.  Please contact your provider to determine the limits that
+apply to your account. Your provider may be able to adjust your
+account&#8217;s limits if they are too low. Also see the API Reference for
+<a class="reference external" href="http://developer.openstack.org/api-ref-compute-v2.html#compute_limits">*Limits*</a>.</p>
+<div class="section" id="rate-limits">
+<h2>Rate limits<a class="headerlink" href="#rate-limits" title="Permalink to this headline">¶</a></h2>
+<p>Rate limits are specified in terms of both a human-readable wild-card
+URI and a machine-processable regular expression. The human-readable
+limit is intended for displaying in graphical user interfaces. The
+machine-processable form is intended to be used directly by client
+applications.</p>
+<p>The regular expression boundary matcher &#8220;^&#8221; for the rate limit takes
+effect after the root URI path. For example, the regular expression
+^/servers would match the bolded portion of the following URI:
+<a class="reference external" href="https://servers.api.openstack.org/v2/3542812">https://servers.api.openstack.org/v2/3542812</a><strong>/servers</strong>.</p>
+<p><strong>Table:&nbsp;Sample rate limits</strong></p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="19%" />
+<col width="30%" />
+<col width="35%" />
+<col width="16%" />
+</colgroup>
+<tbody valign="top">
+<tr class="row-odd"><td>Verb</td>
+<td>URI</td>
+<td>RegEx</td>
+<td>Default</td>
+</tr>
+<tr class="row-even"><td><strong>POST</strong></td>
+<td>*</td>
+<td>.*</td>
+<td>120/min</td>
+</tr>
+<tr class="row-odd"><td><strong>POST</strong></td>
+<td>*/servers</td>
+<td>^/servers</td>
+<td>120/min</td>
+</tr>
+<tr class="row-even"><td><strong>PUT</strong></td>
+<td>*</td>
+<td>.*</td>
+<td>120/min</td>
+</tr>
+<tr class="row-odd"><td><strong>GET</strong></td>
+<td>*changes-since*</td>
+<td>.*changes-since.*</td>
+<td>120/min</td>
+</tr>
+<tr class="row-even"><td><strong>DELETE</strong></td>
+<td>*</td>
+<td>.*</td>
+<td>120/min</td>
+</tr>
+<tr class="row-odd"><td><strong>GET</strong></td>
+<td>*/os-fping*</td>
+<td>^/os-fping</td>
+<td>12/min</td>
+</tr>
+</tbody>
+</table>
+<p>Rate limits are applied in order relative to the verb, going from least
+to most specific.</p>
+<p>In the event a request exceeds the thresholds established for your
+account, a 413 HTTP response is returned with a <tt class="docutils literal"><span class="pre">Retry-After</span></tt> header
+to notify the client when they can attempt to try again.</p>
+</div>
+<div class="section" id="absolute-limits">
+<h2>Absolute limits<a class="headerlink" href="#absolute-limits" title="Permalink to this headline">¶</a></h2>
+<p>Absolute limits are specified as name/value pairs. The name of the
+absolute limit uniquely identifies the limit within a deployment. Please
+consult your provider for an exhaustive list of absolute value names. An
+absolute limit value is always specified as an integer. The name of the
+absolute limit determines the unit type of the integer value. For
+example, the name maxServerMeta implies that the value is in terms of
+server metadata items.</p>
+<p><strong>Table: Sample absolute limits</strong></p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="26%" />
+<col width="26%" />
+<col width="49%" />
+</colgroup>
+<tbody valign="top">
+<tr class="row-odd"><td>Name</td>
+<td>Value</td>
+<td>Description</td>
+</tr>
+<tr class="row-even"><td>maxTotalRAMSize</td>
+<td>51200</td>
+<td>Maximum total amount of RAM (MB)</td>
+</tr>
+<tr class="row-odd"><td>maxServerMeta</td>
+<td>5</td>
+<td>Maximum number of metadata items
+associated with a server.</td>
+</tr>
+<tr class="row-even"><td>maxImageMeta</td>
+<td>5</td>
+<td>Maximum number of metadata items
+associated with an image.</td>
+</tr>
+<tr class="row-odd"><td>maxPersonality</td>
+<td>5</td>
+<td>The maximum number of file
+path/content pairs that can be
+supplied on server build.</td>
+</tr>
+<tr class="row-even"><td>maxPersonalitySize</td>
+<td>10240</td>
+<td>The maximum size, in bytes, for
+each personality file.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="determine-limits-programmatically">
+<h2>Determine limits programmatically<a class="headerlink" href="#determine-limits-programmatically" title="Permalink to this headline">¶</a></h2>
+<p>Applications can programmatically determine current account limits. For
+information, see
+<a class="reference external" href="http://developer.openstack.org/api-ref-compute-v2.html#compute_limits">*Limits*</a>.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">Limits</a><ul>
+<li><a class="reference internal" href="#rate-limits">Rate limits</a></li>
+<li><a class="reference internal" href="#absolute-limits">Absolute limits</a></li>
+<li><a class="reference internal" href="#determine-limits-programmatically">Determine limits programmatically</a></li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="index.html"
+                                  title="previous chapter">Compute API v2</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="links_and_references.html"
+                                  title="next chapter">Links and references</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/v2/limits.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="links_and_references.html" title="Links and references"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Compute API v2"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

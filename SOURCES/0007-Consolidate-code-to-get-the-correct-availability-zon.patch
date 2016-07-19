@@ -1,0 +1,194 @@
+From 7192b1674cebcaea0215237208a44cd9c843826b Mon Sep 17 00:00:00 2001
+From: Hans Lindgren <hanlind@kth.se>
+Date: Mon, 24 Nov 2014 12:03:32 +0100
+Subject: [PATCH] Consolidate code to get the correct availability zone of an
+ instance
+
+This makes getting the availability zone of an instance use the same
+code by placing it inside the helper get_instance_availability_zone().
+
+(cherry picked from commit a8a16f7b3eb255d2b14a1a1adc3562d1cf07f00f)
+
+Upstream-Liberty: https://review.openstack.org/#/c/149562/9
+
+Partly resolves rhbz: 1170242
+
+Conflicts:
+	nova/api/openstack/compute/contrib/extended_availability_zone.py
+	nova/api/openstack/compute/plugins/v3/extended_availability_zone.py
+	nova/tests/unit/api/openstack/compute/contrib/test_extended_availability_zone.py
+	nova/tests/unit/test_availability_zones.py
+	nova/tests/unit/volume/test_cinder.py
+
+Change-Id: Ic7e0f9081d5aca16ce4f3a3559ecc5a17d5c283c
+Reviewed-on: https://code.engineering.redhat.com/gerrit/45894
+Reviewed-by: Sahid Ferdjaoui <sahid.ferdjaoui@redhat.com>
+Tested-by: Sahid Ferdjaoui <sahid.ferdjaoui@redhat.com>
+---
+ .../compute/contrib/extended_availability_zone.py   |  7 +------
+ .../plugins/v3/extended_availability_zone.py        |  7 +------
+ nova/availability_zones.py                          |  8 ++++++--
+ .../contrib/test_extended_availability_zone.py      |  4 +---
+ nova/tests/unit/test_availability_zones.py          | 21 +++++++++++++++++----
+ nova/tests/unit/volume/test_cinder.py               |  5 +++--
+ nova/volume/cinder.py                               |  8 +-------
+ 7 files changed, 30 insertions(+), 30 deletions(-)
+
+diff --git a/nova/api/openstack/compute/contrib/extended_availability_zone.py b/nova/api/openstack/compute/contrib/extended_availability_zone.py
+index c2b756b..f5cdf6e 100644
+--- a/nova/api/openstack/compute/contrib/extended_availability_zone.py
++++ b/nova/api/openstack/compute/contrib/extended_availability_zone.py
+@@ -27,12 +27,7 @@ class ExtendedAZController(wsgi.Controller):
+     def _extend_server(self, context, server, instance):
+         key = "%s:availability_zone" % Extended_availability_zone.alias
+         az = avail_zone.get_instance_availability_zone(context, instance)
+-        if not az and instance.get('availability_zone'):
+-            # Likely hasn't reached a viable compute node yet so give back the
+-            # desired availability_zone that *may* exist in the instance
+-            # record itself.
+-            az = instance.availability_zone
+-        server[key] = az
++        server[key] = az or ''
+ 
+     @wsgi.extends
+     def show(self, req, resp_obj, id):
+diff --git a/nova/api/openstack/compute/plugins/v3/extended_availability_zone.py b/nova/api/openstack/compute/plugins/v3/extended_availability_zone.py
+index ba6ad8b..c027bb6 100644
+--- a/nova/api/openstack/compute/plugins/v3/extended_availability_zone.py
++++ b/nova/api/openstack/compute/plugins/v3/extended_availability_zone.py
+@@ -28,12 +28,7 @@ class ExtendedAZController(wsgi.Controller):
+     def _extend_server(self, context, server, instance):
+         key = "%s:availability_zone" % PREFIX
+         az = avail_zone.get_instance_availability_zone(context, instance)
+-        if not az and instance.get('availability_zone'):
+-            # Likely hasn't reached a viable compute node yet so give back the
+-            # desired availability_zone that *may* exist in the instance
+-            # record itself.
+-            az = instance.availability_zone
+-        server[key] = az
++        server[key] = az or ''
+ 
+     @wsgi.extends
+     def show(self, req, resp_obj, id):
+diff --git a/nova/availability_zones.py b/nova/availability_zones.py
+index d42b910..b5f5434 100644
+--- a/nova/availability_zones.py
++++ b/nova/availability_zones.py
+@@ -167,9 +167,13 @@ def get_availability_zones(context, get_only_available=False,
+ 
+ def get_instance_availability_zone(context, instance):
+     """Return availability zone of specified instance."""
+-    host = str(instance.get('host'))
++    host = instance.get('host')
+     if not host:
+-        return None
++        # Likely hasn't reached a viable compute node yet so give back the
++        # desired availability_zone in the instance record if the boot request
++        # specified one.
++        az = instance.get('availability_zone')
++        return az
+ 
+     cache_key = _make_cache_key(host)
+     cache = _get_cache()
+diff --git a/nova/tests/unit/api/openstack/compute/contrib/test_extended_availability_zone.py b/nova/tests/unit/api/openstack/compute/contrib/test_extended_availability_zone.py
+index be08ac4..a6e4ef3 100644
+--- a/nova/tests/unit/api/openstack/compute/contrib/test_extended_availability_zone.py
++++ b/nova/tests/unit/api/openstack/compute/contrib/test_extended_availability_zone.py
+@@ -114,12 +114,10 @@ class ExtendedAvailabilityZoneTestV21(test.TestCase):
+         res = self._make_request(url)
+ 
+         self.assertEqual(res.status_int, 200)
+-        self.assertAvailabilityZone(self._get_server(res.body), 'fakeaz')
++        self.assertAvailabilityZone(self._get_server(res.body), '')
+ 
+     def test_show_empty_host_az(self):
+         self.stubs.Set(compute.api.API, 'get', fake_compute_get_empty)
+-        self.stubs.Set(availability_zones, 'get_host_availability_zone',
+-                       fake_get_no_host_availability_zone)
+ 
+         url = self.base_url + UUID3
+         res = self._make_request(url)
+diff --git a/nova/tests/unit/test_availability_zones.py b/nova/tests/unit/test_availability_zones.py
+index 2892dd6..1c2a904 100644
+--- a/nova/tests/unit/test_availability_zones.py
++++ b/nova/tests/unit/test_availability_zones.py
+@@ -22,6 +22,7 @@ from oslo_config import cfg
+ from nova import availability_zones as az
+ from nova import context
+ from nova import db
++from nova import objects
+ from nova import test
+ from nova.tests.unit.api.openstack import fakes
+ 
+@@ -238,8 +239,7 @@ class AvailabilityZoneTestCases(test.TestCase):
+ 
+     def test_get_instance_availability_zone_default_value(self):
+         """Test get right availability zone by given an instance."""
+-        fake_inst_id = 162
+-        fake_inst = fakes.stub_instance(fake_inst_id, host=self.host)
++        fake_inst = objects.Instance(host=self.host)
+ 
+         self.assertEqual(self.default_az,
+                 az.get_instance_availability_zone(self.context, fake_inst))
+@@ -250,8 +250,21 @@ class AvailabilityZoneTestCases(test.TestCase):
+         service = self._create_service_with_topic('compute', host)
+         self._add_to_aggregate(service, self.agg)
+ 
+-        fake_inst_id = 174
+-        fake_inst = fakes.stub_instance(fake_inst_id, host=host)
++        fake_inst = objects.Instance(host=host)
+ 
+         self.assertEqual(self.availability_zone,
+                 az.get_instance_availability_zone(self.context, fake_inst))
++
++    def test_get_instance_availability_zone_no_host(self):
++        """Test get availability zone from instance if host not set."""
++        fake_inst = objects.Instance(host=None, availability_zone='inst-az')
++
++        result = az.get_instance_availability_zone(self.context, fake_inst)
++        self.assertEqual('inst-az', result)
++
++    def test_get_instance_availability_zone_no_host_no_az(self):
++        """Test get availability zone if neither host nor az is set."""
++        fake_inst = objects.Instance(host=None, availability_zone=None)
++
++        result = az.get_instance_availability_zone(self.context, fake_inst)
++        self.assertIsNone(result)
+diff --git a/nova/tests/unit/volume/test_cinder.py b/nova/tests/unit/volume/test_cinder.py
+index 7821719..6afbd99 100644
+--- a/nova/tests/unit/volume/test_cinder.py
++++ b/nova/tests/unit/volume/test_cinder.py
+@@ -176,11 +176,12 @@ class CinderApiTestCase(test.NoDBTestCase):
+             volume['availability_zone'] = 'zone1'
+             self.assertIsNone(self.api.check_attach(
+                 self.ctx, volume, instance))
+-            self.assertFalse(mock_get_instance_az.called)
++            mock_get_instance_az.assert_called_once_with(self.ctx, instance)
++            mock_get_instance_az.reset_mock()
+             volume['availability_zone'] = 'zone2'
+             self.assertRaises(exception.InvalidVolume,
+                             self.api.check_attach, self.ctx, volume, instance)
+-            self.assertFalse(mock_get_instance_az.called)
++            mock_get_instance_az.assert_called_once_with(self.ctx, instance)
+             cinder.CONF.reset()
+ 
+     def test_check_attach(self):
+diff --git a/nova/volume/cinder.py b/nova/volume/cinder.py
+index d581ffe..4faef4d 100644
+--- a/nova/volume/cinder.py
++++ b/nova/volume/cinder.py
+@@ -316,13 +316,7 @@ class API(object):
+             msg = _("volume %s already attached") % volume['id']
+             raise exception.InvalidVolume(reason=msg)
+         if instance and not CONF.cinder.cross_az_attach:
+-            # NOTE(sorrison): If instance is on a host we match against it's AZ
+-            #                 else we check the intended AZ
+-            if instance.get('host'):
+-                instance_az = az.get_instance_availability_zone(
+-                    context, instance)
+-            else:
+-                instance_az = instance['availability_zone']
++            instance_az = az.get_instance_availability_zone(context, instance)
+             if instance_az != volume['availability_zone']:
+                 msg = _("Instance %(instance)s and volume %(vol)s are not in "
+                         "the same availability_zone. Instance is in "

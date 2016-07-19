@@ -1,0 +1,59 @@
+diff -aruN nova-2015.1.0.org2/nova/virt/libvirt/config.py nova-2015.1.0/nova/virt/libvirt/config.py
+--- nova-2015.1.0.org2/nova/virt/libvirt/config.py	2015-11-13 16:49:57.173414595 +0800
++++ nova-2015.1.0/nova/virt/libvirt/config.py	2015-11-13 16:50:27.980177039 +0800
+@@ -1337,6 +1337,37 @@
+         dev = super(LibvirtConfigGuestSound, self).format_dom()
+         dev.set("model", self.type)
+         return dev
++
++class LibvirtConfigGuestUsbRed(LibvirtConfigGuestDevice):#wz
++    def __init__(self, **kwargs):
++        super(LibvirtConfigGuestUsbRed, self).__init__(root_name="redirdev",**kwargs)
++        self.type = "spicevmc"
++        self.bus = "usb"
++    def format_dom(self):
++        dev = super(LibvirtConfigGuestUsbRed, self).format_dom()
++        dev.set("type", self.type)
++        dev.set("bus", self.bus)
++        return dev
++
++class LibvirtConfigGuestUsb3Controller(LibvirtConfigGuestDevice):#wz
++
++    def __init__(self, **kwargs):
++        super(LibvirtConfigGuestUsb3Controller,self).__init__(root_name="controller", **kwargs)
++        self.type = 'usb'
++        self.index = None
++        self.model = 'nec-xhci'
++
++    def format_dom(self):
++        controller = super(LibvirtConfigGuestUsb3Controller, self).format_dom()
++        controller.set("type", self.type)
++        if self.index is not None:
++            controller.set("index", str(self.index))
++        if self.model:
++            controller.set("model", str(self.model))
++        return controller
++
++
++
+ class LibvirtConfigMemoryBalloon(LibvirtConfigGuestDevice):
+     def __init__(self, **kwargs):
+         super(LibvirtConfigMemoryBalloon, self).__init__(
+diff -aruN nova-2015.1.0.org2/nova/virt/libvirt/driver.py nova-2015.1.0/nova/virt/libvirt/driver.py
+--- nova-2015.1.0.org2/nova/virt/libvirt/driver.py	2015-11-13 16:49:57.168414634 +0800
++++ nova-2015.1.0/nova/virt/libvirt/driver.py	2015-11-13 16:50:28.015176775 +0800
+@@ -3891,7 +3891,13 @@
+         guest.add_device(video)
+         sound = vconfig.LibvirtConfigGuestSound()
+         guest.add_device(sound)	
+-
++        #add usb redirect wz
++        usbred = vconfig.LibvirtConfigGuestUsbRed()
++        usbred2 =  vconfig.LibvirtConfigGuestUsbRed()
++        guest.add_device(usbred)
++        guest.add_device(usbred2)
++        usb3ctl = vconfig.LibvirtConfigGuestUsb3Controller()
++        guest.add_device(usb3ctl)
+ 
+     def _add_qga_device(self, guest, instance):
+         qga = vconfig.LibvirtConfigGuestChannel()

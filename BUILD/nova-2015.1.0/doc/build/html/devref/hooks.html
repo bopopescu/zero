@@ -1,0 +1,180 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Hooks &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="up" title="Developer Guide" href="index.html" />
+    <link rel="next" title="Upgrades" href="upgrade.html" />
+    <link rel="prev" title="AMQP and Nova" href="rpc.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="hooks">
+<h1>Hooks<a class="headerlink" href="#hooks" title="Permalink to this headline">¶</a></h1>
+<p>Hooks provide a mechanism to extend Nova with custom code through a plugin
+mechanism.</p>
+<p>Named hooks are added to nova code via a decorator that will lazily load
+plugin code matching the name.  The loading works via setuptools
+<a class="reference external" href="http://pythonhosted.org/setuptools/pkg_resources.html#entry-points">entry points</a>.</p>
+<div class="section" id="what-are-hooks-good-for">
+<h2>What are hooks good for?<a class="headerlink" href="#what-are-hooks-good-for" title="Permalink to this headline">¶</a></h2>
+<p>Hooks are good for anchoring your custom code to Nova internal APIs.</p>
+</div>
+<div class="section" id="what-are-hooks-not-good-for">
+<h2>What are hooks NOT good for?<a class="headerlink" href="#what-are-hooks-not-good-for" title="Permalink to this headline">¶</a></h2>
+<p>Hooks should not be used when API stability is a key factor.  Internal APIs may
+change.  Consider using a notification driver if this is important to you.</p>
+</div>
+<div class="section" id="declaring-hooks-in-the-nova-codebase">
+<h2>Declaring hooks in the Nova codebase<a class="headerlink" href="#declaring-hooks-in-the-nova-codebase" title="Permalink to this headline">¶</a></h2>
+<p>The following example declares a <em>resize_hook</em> around the <em>resize_instance</em> method:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">nova</span> <span class="kn">import</span> <span class="n">hooks</span>
+
+<span class="nd">@hooks.add_hook</span><span class="p">(</span><span class="s2">&quot;resize_hook&quot;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">resize_instance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">instance</span><span class="p">,</span> <span class="n">a</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
+    <span class="o">...</span>
+</pre></div>
+</div>
+<p>Hook objects can now be attached via entry points to the <em>resize_hook</em>.</p>
+</div>
+<div class="section" id="adding-hook-object-code">
+<h2>Adding hook object code<a class="headerlink" href="#adding-hook-object-code" title="Permalink to this headline">¶</a></h2>
+<ol class="arabic">
+<li><p class="first">Setup a Python package with a setup.py file.</p>
+</li>
+<li><p class="first">Add the following to the setup.py setup call:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span><span class="n">entry_points</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;nova.hooks&#39;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="s1">&#39;resize_hook=your_package.hooks:YourHookClass&#39;</span><span class="p">,</span>
+    <span class="p">]</span>
+<span class="p">},</span>
+</pre></div>
+</div>
+</li>
+<li><p class="first"><em>YourHookClass</em> should be an object with <em>pre</em> and/or <em>post</em> methods:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">YourHookClass</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+
+    <span class="k">def</span> <span class="nf">pre</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="o">....</span>
+
+    <span class="k">def</span> <span class="nf">post</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rv</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="o">....</span>
+</pre></div>
+</div>
+</li>
+</ol>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">Hooks</a><ul>
+<li><a class="reference internal" href="#what-are-hooks-good-for">What are hooks good for?</a></li>
+<li><a class="reference internal" href="#what-are-hooks-not-good-for">What are hooks NOT good for?</a></li>
+<li><a class="reference internal" href="#declaring-hooks-in-the-nova-codebase">Declaring hooks in the Nova codebase</a></li>
+<li><a class="reference internal" href="#adding-hook-object-code">Adding hook object code</a></li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="rpc.html"
+                                  title="previous chapter">AMQP and Nova</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="upgrade.html"
+                                  title="next chapter">Upgrades</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/devref/hooks.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="upgrade.html" title="Upgrades"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="rpc.html" title="AMQP and Nova"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Developer Guide</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

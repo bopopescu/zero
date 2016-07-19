@@ -1,0 +1,36 @@
+diff -aruN nova-2015.1.0-org/nova/virt/libvirt/driver.py nova-2015.1.0/nova/virt/libvirt/driver.py
+--- nova-2015.1.0-org/nova/virt/libvirt/driver.py	2016-04-07 15:22:59.683606447 +0800
++++ nova-2015.1.0/nova/virt/libvirt/driver.py	2016-04-07 15:24:46.300236756 +0800
+@@ -3894,10 +3894,6 @@
+         sound = vconfig.LibvirtConfigGuestSound()
+         guest.add_device(sound)	
+         #add usb redirect wz
+-        usbred = vconfig.LibvirtConfigGuestUsbRed()
+-        usbred2 =  vconfig.LibvirtConfigGuestUsbRed()
+-        guest.add_device(usbred)
+-        guest.add_device(usbred2)
+         usb2ctl = vconfig.LibvirtConfigGuestUsb2Controller()
+         guest.add_device(usb2ctl)
+         guest.add_device(vconfig.LibvirtConfigGuestUsbuhciController())
+@@ -4248,12 +4244,20 @@
+             graphics.listen = CONF.spice.server_listen
+             #wz for spice password
+             graphics.passwd =  md5.new(instance.uuid).hexdigest()
+-            LOG.warn('cs2c------------------ %s %s' % (str(graphics),graphics.passwd))
++            LOG.warn('cs2c------------------ %s ' % (str(graphics)))
+             guest.add_device(graphics)
+             add_video_driver = True
+ 
+         if add_video_driver:
++            LOG.warn('cs2c-------meta----------- %s ' % (str(instance.metadata)))
+             self._add_video_driver(guest, image_meta, img_meta_prop, flavor)
++      
++        #add usb redirect wz
++        if instance.metadata.get('usb_redirect_flag') == None or instance.metadata.get('usb_redirect_flag') == '1':
++            usbred = vconfig.LibvirtConfigGuestUsbRed()
++            usbred2 =  vconfig.LibvirtConfigGuestUsbRed()
++            guest.add_device(usbred)
++            guest.add_device(usbred2)
+ 
+         # Qemu guest agent only support 'qemu' and 'kvm' hypervisor
+         if virt_type in ('qemu', 'kvm'):

@@ -1,0 +1,200 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Development policies &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="up" title="Developer Guide" href="index.html" />
+    <link rel="next" title="Testing NUMA related hardware setup with libvirt" href="testing/libvirt-numa.html" />
+    <link rel="prev" title="Blueprints in Kilo" href="kilo.blueprints.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="development-policies">
+<h1>Development policies<a class="headerlink" href="#development-policies" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="out-of-tree-support">
+<h2>Out Of Tree Support<a class="headerlink" href="#out-of-tree-support" title="Permalink to this headline">¶</a></h2>
+<p>While nova has many entrypoints and other places in the code that allow for
+wiring in out of tree code, upstream doesn&#8217;t actively make any guarantees
+about these extensibility points; we don&#8217;t support them, make any guarantees
+about compatibility, stability, etc.</p>
+</div>
+<div class="section" id="public-contractual-apis">
+<h2>Public Contractual APIs<a class="headerlink" href="#public-contractual-apis" title="Permalink to this headline">¶</a></h2>
+<p>Although nova has many internal APIs, they are not all public contractual
+APIs. Below is a list of our public contractual APIs:</p>
+<ul class="simple">
+<li>All REST API</li>
+</ul>
+<p>Anything not in this list is considered private, not to be used outside of
+nova, and should not be considered stable.</p>
+</div>
+<div class="section" id="rest-apis">
+<h2>REST APIs<a class="headerlink" href="#rest-apis" title="Permalink to this headline">¶</a></h2>
+<p>Follow the guidelines set in: <a class="reference external" href="https://wiki.openstack.org/wiki/APIChangeGuidelines">https://wiki.openstack.org/wiki/APIChangeGuidelines</a></p>
+<p>The canonical source for REST API behavior is the code <em>not</em> documentation.
+Documentation is manually generated after the code by folks looking at the
+code and writing up what they think it does, and it is very easy to get
+this wrong.</p>
+<p>This policy is in place to prevent us from making backwards incompatible
+changes to REST APIs.</p>
+</div>
+<div class="section" id="patches-and-reviews">
+<h2>Patches and Reviews<a class="headerlink" href="#patches-and-reviews" title="Permalink to this headline">¶</a></h2>
+<p>Merging a patch requires a non-trivial amount of reviewer resources.
+As a patch author, you should try to offset the reviewer resources
+spent on your patch by reviewing other patches. If no one does this, the review
+team (cores and otherwise) become spread too thin.</p>
+<p>For review guidelines see: <a class="reference external" href="https://wiki.openstack.org/wiki/ReviewChecklist">https://wiki.openstack.org/wiki/ReviewChecklist</a></p>
+</div>
+<div class="section" id="reverts-for-retrospective-vetos">
+<h2>Reverts for Retrospective Vetos<a class="headerlink" href="#reverts-for-retrospective-vetos" title="Permalink to this headline">¶</a></h2>
+<p>Sometimes our simple &#8220;2 +2s&#8221; approval policy will result in errors.
+These errors might be a bug that was missed, or equally importantly,
+it might be that other cores feel that there is a need for more
+discussion on the implementation of a given piece of code.</p>
+<p>Rather than <a class="reference external" href="https://lists.launchpad.net/openstack/msg08574.html">an enforced time-based solution</a> - for example, a patch
+couldn&#8217;t be merged until it has been up for review for 3 days - we have
+chosen an honor-based system where core reviewers would not approve
+potentially contentious patches until the proposal had been
+sufficiently socialized and everyone had a chance to raise any
+concerns.</p>
+<p>Recognising that mistakes can happen, we also have a policy where
+contentious patches which were quickly approved should be reverted so
+that the discussion around the proposal can continue as if the patch
+had never been merged in the first place. In such a situation, the
+procedure is:</p>
+<ol class="arabic simple" start="0">
+<li>The commit to be reverted must not have been released.</li>
+<li>The core team member who has a -2 worthy objection should propose a
+revert, stating the specific concerns that they feel need
+addressing.</li>
+<li>Any subsequent patches depending on the to-be-reverted patch may
+need to be reverted also.</li>
+<li>Other core team members should quickly approve the revert. No detailed
+debate should be needed at this point. A -2 vote on a revert is
+strongly discouraged, because it effectively blocks the right of
+cores approving the revert from -2 voting on the original patch.</li>
+<li>The original patch submitter should re-submit the change, with a
+reference to the original patch and the revert.</li>
+<li>The original reviewers of the patch should restore their votes and
+attempt to summarize their previous reasons for their votes.</li>
+<li>The patch should not be re-approved until the concerns of the people
+proposing the revert are worked through. A mailing list discussion or
+design spec might be the best way to achieve this.</li>
+</ol>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">Development policies</a><ul>
+<li><a class="reference internal" href="#out-of-tree-support">Out Of Tree Support</a></li>
+<li><a class="reference internal" href="#public-contractual-apis">Public Contractual APIs</a></li>
+<li><a class="reference internal" href="#rest-apis">REST APIs</a></li>
+<li><a class="reference internal" href="#patches-and-reviews">Patches and Reviews</a></li>
+<li><a class="reference internal" href="#reverts-for-retrospective-vetos">Reverts for Retrospective Vetos</a></li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="kilo.blueprints.html"
+                                  title="previous chapter">Blueprints in Kilo</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="testing/libvirt-numa.html"
+                                  title="next chapter">Testing NUMA related hardware setup with libvirt</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/devref/policies.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="testing/libvirt-numa.html" title="Testing NUMA related hardware setup with libvirt"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="kilo.blueprints.html" title="Blueprints in Kilo"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Developer Guide</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

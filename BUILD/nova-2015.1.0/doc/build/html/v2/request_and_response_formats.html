@@ -1,0 +1,198 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Request and response formats &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="next" title="Versions" href="versions.html" />
+    <link rel="prev" title="Efficient polling with the Changes-Since parameter" href="polling_changes-since_parameter.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="request-and-response-formats">
+<h1>Request and response formats<a class="headerlink" href="#request-and-response-formats" title="Permalink to this headline">¶</a></h1>
+<p>The OpenStack Compute API supports JSON request and response formats.</p>
+<div class="section" id="request-format">
+<h2>Request format<a class="headerlink" href="#request-format" title="Permalink to this headline">¶</a></h2>
+<p>Use the <tt class="docutils literal"><span class="pre">Content-Type</span></tt> request header to specify the request format.
+This header is required for operations that have a request body.</p>
+<p>The syntax for the <tt class="docutils literal"><span class="pre">Content-Type</span></tt> header is:</p>
+<div class="code highlight-python"><div class="highlight"><pre><span></span>Content-Type: application/FORMAT
+</pre></div>
+</div>
+<p>Where <tt class="docutils literal"><span class="pre">FORMAT</span></tt> is <tt class="docutils literal"><span class="pre">json</span></tt>.</p>
+</div>
+<div class="section" id="response-format">
+<h2>Response format<a class="headerlink" href="#response-format" title="Permalink to this headline">¶</a></h2>
+<p>Use one of the following methods to specify the response format:</p>
+<p><tt class="docutils literal"><span class="pre">Accept</span></tt> header
+The syntax for the <tt class="docutils literal"><span class="pre">Accept</span></tt> header is:</p>
+<blockquote>
+<div><div class="code highlight-python"><div class="highlight"><pre><span></span>Accept: application/FORMAT
+</pre></div>
+</div>
+</div></blockquote>
+<p>Where <em>``FORMAT``</em> is <tt class="docutils literal"><span class="pre">json</span></tt> and the default format is <tt class="docutils literal"><span class="pre">json</span></tt>.</p>
+<p>Query extension
+Add a <tt class="docutils literal"><span class="pre">.json</span></tt> extension to the request URI. For example, the <tt class="docutils literal"><span class="pre">.json</span></tt> extension in the following list servers URI request specifies that the response body is to be returned in JSON format:</p>
+<blockquote>
+<div><strong>GET</strong>&nbsp;<em>``publicURL``</em>/servers.json</div></blockquote>
+<p>If you do not specify a response format, JSON is the default.</p>
+</div>
+<div class="section" id="request-and-response-examples">
+<h2>Request and response examples<a class="headerlink" href="#request-and-response-examples" title="Permalink to this headline">¶</a></h2>
+<p>You can serialize a response in a different format from the request
+format.</p>
+<p>The examples below show a request body in JSON format.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Though you may find outdated documents with XML examples, XML support
+in requests and responses has been deprecated for the Compute API v2
+(stable) and v2.1 (experimental).</p>
+</div>
+<p><strong>Example:&nbsp;JSON request with headers</strong></p>
+<div class="line-block">
+<div class="line">POST&nbsp;/v2/010101/servers&nbsp;HTTP/1.1</div>
+<div class="line-block">
+<div class="line">Host:&nbsp;servers.api.openstack.org</div>
+<div class="line">Content-Type:&nbsp;application/json</div>
+<div class="line">Accept:&nbsp;application/xml</div>
+<div class="line">X-Auth-Token:&nbsp;eaaafd18-0fed-4b3a-81b4-663c99ec1cbb</div>
+</div>
+</div>
+<div class="code highlight-python"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;server&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;server-test-1&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;imageRef&quot;</span><span class="p">:</span> <span class="s2">&quot;b5660a6e-4b46-4be3-9707-6b47221b454f&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;flavorRef&quot;</span><span class="p">:</span> <span class="s2">&quot;2&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;max_count&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="s2">&quot;min_count&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="s2">&quot;networks&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;uuid&quot;</span><span class="p">:</span> <span class="s2">&quot;d32019d3-bc6e-4319-9c1d-6722fc136a22&quot;</span>
+            <span class="p">}</span>
+        <span class="p">],</span>
+        <span class="s2">&quot;security_groups&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span>
+            <span class="p">},</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;another-secgroup-name&quot;</span>
+            <span class="p">}</span>
+        <span class="p">]</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">Request and response formats</a><ul>
+<li><a class="reference internal" href="#request-format">Request format</a></li>
+<li><a class="reference internal" href="#response-format">Response format</a></li>
+<li><a class="reference internal" href="#request-and-response-examples">Request and response examples</a></li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="polling_changes-since_parameter.html"
+                                  title="previous chapter">Efficient polling with the Changes-Since parameter</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="versions.html"
+                                  title="next chapter">Versions</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/v2/request_and_response_formats.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="versions.html" title="Versions"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="polling_changes-since_parameter.html" title="Efficient polling with the Changes-Since parameter"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

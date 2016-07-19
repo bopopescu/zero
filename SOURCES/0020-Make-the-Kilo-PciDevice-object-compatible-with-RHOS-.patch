@@ -1,0 +1,205 @@
+From caee2d9f7f2e44a2a456bd8515f7484a0ea668a8 Mon Sep 17 00:00:00 2001
+From: Nikola Dipanov <ndipanov@redhat.com>
+Date: Tue, 23 Jun 2015 18:08:18 +0100
+Subject: [PATCH] Make the Kilo PciDevice object compatible with RHOS 6 data
+
+As part of resolving bz#1104926 the backported patches were modified so
+as to avoid having to do an additional database schema migration (not
+viable in a .z release of RHOS).
+
+This patch adds the compatibility code to the Kilo version of the
+PciDevice object so that RHOS 7 will work when upgraded from RHOS 6
+Live upgrades, where we have a mix of RHOS 6 and RHOS 7 compute nodes in
+the same cloud are supported by this change as well.
+
+Downstream-only
+Resloves: rhbz#1203160
+
+Change-Id: I02b16e92b41a89bf55133805e64627eeee7b54b7
+Reviewed-on: https://code.engineering.redhat.com/gerrit/51365
+Reviewed-by: Dan Smith <dansmith@redhat.com>
+Reviewed-by: Matthew Booth <mbooth@redhat.com>
+Tested-by: Matthew Booth <mbooth@redhat.com>
+---
+ nova/objects/pci_device.py                 | 22 +++++++
+ nova/tests/unit/objects/test_pci_device.py | 94 +++++++++++++++++++++++++++++-
+ 2 files changed, 113 insertions(+), 3 deletions(-)
+
+diff --git a/nova/objects/pci_device.py b/nova/objects/pci_device.py
+index 96ff27b..2adc2ef 100644
+--- a/nova/objects/pci_device.py
++++ b/nova/objects/pci_device.py
+@@ -94,6 +94,12 @@ class PciDevice(base.NovaPersistentObject, base.NovaObject,
+ 
+     def obj_make_compatible(self, primitive, target_version):
+         target_version = utils.convert_version_to_tuple(target_version)
++        if target_version < (1, 3) and 'numa_node' in primitive:
++            if primitive['numa_node'] is not None:
++                extra_info = primitive.get('extra_info', {})
++                extra_info['numa_node'] = str(primitive['numa_node'])
++                primitive['extra_info'] = extra_info
++            del primitive['numa_node']
+         if target_version < (1, 2) and 'request_id' in primitive:
+             del primitive['request_id']
+ 
+@@ -137,6 +143,15 @@ class PciDevice(base.NovaPersistentObject, base.NovaObject,
+                 pci_device.extra_info = jsonutils.loads(extra_info)
+         pci_device._context = context
+         pci_device.obj_reset_changes()
++
++        numa_node_extra = pci_device.extra_info.pop("numa_node", None)
++        # NOTE (ndipanov): Never overwrite an acual value with legacy
++        #                  RHOS 6 data from 'extra_info'
++        if pci_device.numa_node is None and numa_node_extra is not None:
++            pci_device.numa_node = int(numa_node_extra)
++            # Make sure the next save updates this in addition to numa_node
++            pci_device._changed_fields.add('extra_info')
++
+         return pci_device
+ 
+     @base.remotable_classmethod
+@@ -171,6 +186,13 @@ class PciDevice(base.NovaPersistentObject, base.NovaObject,
+         elif self.status != 'deleted':
+             updates = self.obj_get_changes()
+             if 'extra_info' in updates:
++                numa_node_extra = updates['extra_info'].pop('numa_node', None)
++                # NOTE (ndipanov): Never overwrite an acual value with legacy
++                #                  RHOS 6 data from 'extra_info'
++                if (updates.get('numa_node') is None and
++                        self.numa_node is None and
++                        numa_node_extra is not None):
++                    updates['numa_node'] = int(numa_node_extra)
+                 updates['extra_info'] = jsonutils.dumps(updates['extra_info'])
+             if updates:
+                 db_pci = db.pci_device_update(self._context,
+diff --git a/nova/tests/unit/objects/test_pci_device.py b/nova/tests/unit/objects/test_pci_device.py
+index d6386bf..d7414b3 100644
+--- a/nova/tests/unit/objects/test_pci_device.py
++++ b/nova/tests/unit/objects/test_pci_device.py
+@@ -72,6 +72,26 @@ fake_db_dev_1 = {
+     }
+ 
+ 
++fake_db_dev_rhos_6_0 = {
++    'created_at': None,
++    'updated_at': None,
++    'deleted_at': None,
++    'deleted': None,
++    'id': 1,
++    'compute_node_id': 1,
++    'address': 'a',
++    'vendor_id': 'v',
++    'product_id': 'p',
++    'numa_node': None,
++    'dev_type': 't',
++    'status': 'available',
++    'dev_id': 'i',
++    'label': 'l',
++    'instance_uuid': None,
++    'extra_info': '{"numa_node": "0"}',
++    'request_id': None,
++    }
++
+ class _TestPciDeviceObject(object):
+     def _create_fake_instance(self):
+         self.inst = instance.Instance()
+@@ -135,14 +155,30 @@ class _TestPciDeviceObject(object):
+         self.assertEqual(self.pci_device.obj_what_changed(), set())
+         self.assertRemotes()
+ 
+-    def test_get_by_dev_id(self):
++    def test_get_by_dev_addr_RHOS_6_0_format(self):
++        ctxt = context.get_admin_context()
++        self.mox.StubOutWithMock(db, 'pci_device_get_by_addr')
++        db.pci_device_get_by_addr(ctxt, 1, 'a').AndReturn(fake_db_dev_rhos_6_0)
++        self.mox.ReplayAll()
++        self.pci_device = pci_device.PciDevice.get_by_dev_addr(ctxt, 1, 'a')
++        self.assertEqual(self.pci_device.product_id, 'p')
++        self.assertEqual(self.pci_device.obj_what_changed(),
++                         set(['numa_node', 'extra_info']))
++        self.assertEqual(self.pci_device.numa_node, 0)
++        self.assertEqual(self.pci_device.extra_info, {})
++        self.assertRemotes()
++
++    def test_get_by_dev_id_RHOS_6_0_format(self):
+         ctxt = context.get_admin_context()
+         self.mox.StubOutWithMock(db, 'pci_device_get_by_id')
+-        db.pci_device_get_by_id(ctxt, 1).AndReturn(fake_db_dev)
++        db.pci_device_get_by_id(ctxt, 1).AndReturn(fake_db_dev_rhos_6_0)
+         self.mox.ReplayAll()
+         self.pci_device = pci_device.PciDevice.get_by_dev_id(ctxt, 1)
+         self.assertEqual(self.pci_device.product_id, 'p')
+-        self.assertEqual(self.pci_device.obj_what_changed(), set())
++        self.assertEqual(self.pci_device.obj_what_changed(),
++                         set(['numa_node', 'extra_info']))
++        self.assertEqual(self.pci_device.numa_node, 0)
++        self.assertEqual(self.pci_device.extra_info, {})
+         self.assertRemotes()
+ 
+     def test_save(self):
+@@ -164,6 +200,51 @@ class _TestPciDeviceObject(object):
+                          'fake-uuid-3')
+         self.assertRemotes()
+ 
++    def test_save_RHOS_6_0_format(self):
++        ctxt = context.get_admin_context
++        kw = {'compute_node_id': 1, 'address': 'a',
++              'status': 'available', 'numa_node': None}
++        self.pci_device = pci_device.PciDevice(ctxt, **kw)
++        self.pci_device.obj_reset_changes()
++        self.pci_device['extra_info'] = {'numa_node': 0}
++        self.mox.StubOutWithMock(db, 'pci_device_update')
++        expected_updates = {'extra_info': '{}', 'numa_node': 0}
++        db.pci_device_update(ctxt, 1, 'a',
++                             expected_updates).AndReturn(fake_db_dev)
++        self.mox.ReplayAll()
++        self.pci_device.save()
++        self.assertEqual(self.pci_device.numa_node, 0)
++        self.assertEqual(self.pci_device.extra_info, {})
++        self.assertRemotes()
++
++    def test_save_RHOS_6_0_format_numa_field_set(self):
++        ctxt = context.get_admin_context
++        kw = {'compute_node_id': 1, 'address': 'a',
++              'status': 'available', 'numa_node': 1}
++        self.pci_device = pci_device.PciDevice(ctxt, **kw)
++        self.pci_device.obj_reset_changes()
++        self.pci_device['extra_info'] = {'numa_node': 0}
++        self.mox.StubOutWithMock(db, 'pci_device_update')
++        expected_updates = {'extra_info': '{}'}
++        db.pci_device_update(ctxt, 1, 'a',
++                             expected_updates).AndReturn(fake_db_dev_1)
++        self.mox.ReplayAll()
++        self.pci_device.save()
++        self.assertEqual(self.pci_device.numa_node, 1)
++        self.assertEqual(self.pci_device.extra_info, {})
++        self.assertRemotes()
++
++    def test_save_RHOS_6_0_format_no_numa(self):
++        ctxt = context.get_admin_context
++        kw = {'compute_node_id': 1, 'address': 'a',
++              'status': 'available', 'numa_node': 1}
++        self.pci_device = pci_device.PciDevice(ctxt, **kw)
++        self.pci_device.obj_reset_changes()
++        self.mox.StubOutWithMock(db, 'pci_device_update')
++        expected_updates = {'extra_info': '{}'}
++        self.pci_device.save()
++        self.assertRemotes()
++
+     def test_save_no_extra_info(self):
+         return_dev = dict(fake_db_dev, status='available',
+                           instance_uuid='fake-uuid-3')
+@@ -213,6 +294,13 @@ class _TestPciDeviceObject(object):
+         self.pci_device = pci_device.PciDevice.create(self.dev_dict)
+         self.assertEqual(1, self.pci_device.numa_node)
+ 
++    def test_obj_make_compatible_RHOS_6_0(self):
++        self.pci_device = pci_device.PciDevice.create(dev_dict)
++        compatible = self.pci_device.obj_to_primitive(target_version='1.2')
++        self.assertNotIn('numa_node', compatible['nova_object.data'])
++        self.assertEqual({'numa_node': '0'},
++                         compatible['nova_object.data']['extra_info'])
++
+ 
+ class TestPciDeviceObject(test_objects._LocalTest,
+                           _TestPciDeviceObject):

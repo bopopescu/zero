@@ -1,0 +1,322 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>API Microversions &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="up" title="Developer Guide" href="index.html" />
+    <link rel="next" title="Nova System Architecture" href="architecture.html" />
+    <link rel="prev" title="API Plugins" href="api_plugins.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="api-microversions">
+<h1>API Microversions<a class="headerlink" href="#api-microversions" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="background">
+<h2>Background<a class="headerlink" href="#background" title="Permalink to this headline">¶</a></h2>
+<p>Nova uses a framework we call &#8216;API Microversions&#8217; for allowing changes
+to the API while preserving backward compatibility. The basic idea is
+that a user has to explicitly ask for their request to be treated with
+a particular version of the API. So breaking changes can be added to
+the API without breaking users who don&#8217;t specifically ask for it. This
+is done with an HTTP header <tt class="docutils literal"><span class="pre">X-OpenStack-Nova-API-Version</span></tt> which
+is a monotonically increasing semantic version number starting from
+<tt class="docutils literal"><span class="pre">2.1</span></tt>.</p>
+<p>If a user makes a request without specifying a version, they will get
+the <tt class="docutils literal"><span class="pre">DEFAULT_API_VERSION</span></tt> as defined in
+<tt class="docutils literal"><span class="pre">nova/api/openstack/wsgi.py</span></tt>.  This value is currently <tt class="docutils literal"><span class="pre">2.1</span></tt> and
+is expected to remain so for quite a long time.</p>
+<p>There is a special value <tt class="docutils literal"><span class="pre">latest</span></tt> which can be specified, which will
+allow a client to always receive the most recent version of API
+responses from the server.</p>
+<p>For full details please read the <a class="reference external" href="http://git.openstack.org/cgit/openstack/nova-specs/tree/specs/kilo/approved/api-microversions.rst">Kilo spec for microversions</a></p>
+</div>
+<div class="section" id="in-code">
+<h2>In Code<a class="headerlink" href="#in-code" title="Permalink to this headline">¶</a></h2>
+<p>In <tt class="docutils literal"><span class="pre">nova/api/openstack/wsgi.py</span></tt> we define an <tt class="docutils literal"><span class="pre">&#64;api_version</span></tt> decorator
+which is intended to be used on top-level Controller methods. It is
+not appropriate for lower-level methods. Some examples:</p>
+<div class="section" id="adding-a-new-api-method">
+<h3>Adding a new API method<a class="headerlink" href="#adding-a-new-api-method" title="Permalink to this headline">¶</a></h3>
+<p>In the controller class:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span><span class="nd">@wsgi.Controller.api_version</span><span class="p">(</span><span class="s2">&quot;2.4&quot;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">my_api_method</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="nb">id</span><span class="p">):</span>
+    <span class="o">....</span>
+</pre></div>
+</div>
+<p>This method would only be available if the caller had specified an
+<tt class="docutils literal"><span class="pre">X-OpenStack-Nova-API-Version</span></tt> of &gt;= <tt class="docutils literal"><span class="pre">2.4</span></tt>. If they had specified a
+lower version (or not specified it and received the default of <tt class="docutils literal"><span class="pre">2.1</span></tt>)
+the server would respond with <tt class="docutils literal"><span class="pre">HTTP/404</span></tt>.</p>
+</div>
+<div class="section" id="removing-an-api-method">
+<h3>Removing an API method<a class="headerlink" href="#removing-an-api-method" title="Permalink to this headline">¶</a></h3>
+<p>In the controller class:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span><span class="nd">@wsgi.Controller.api_version</span><span class="p">(</span><span class="s2">&quot;2.1&quot;</span><span class="p">,</span> <span class="s2">&quot;2.4&quot;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">my_api_method</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="nb">id</span><span class="p">):</span>
+    <span class="o">....</span>
+</pre></div>
+</div>
+<p>This method would only be available if the caller had specified an
+<tt class="docutils literal"><span class="pre">X-OpenStack-Nova-API-Version</span></tt> of &lt;= <tt class="docutils literal"><span class="pre">2.4</span></tt>. If <tt class="docutils literal"><span class="pre">2.5</span></tt> or later
+is specified the server will respond with <tt class="docutils literal"><span class="pre">HTTP/404</span></tt>.</p>
+</div>
+<div class="section" id="changing-a-method-s-behaviour">
+<h3>Changing a method&#8217;s behaviour<a class="headerlink" href="#changing-a-method-s-behaviour" title="Permalink to this headline">¶</a></h3>
+<p>In the controller class:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span><span class="nd">@wsgi.Controller.api_version</span><span class="p">(</span><span class="s2">&quot;2.1&quot;</span><span class="p">,</span> <span class="s2">&quot;2.3&quot;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">my_api_method</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="nb">id</span><span class="p">):</span>
+    <span class="o">....</span> <span class="n">method_1</span> <span class="o">...</span>
+
+<span class="nd">@wsgi.Controller.api_version</span><span class="p">(</span><span class="s2">&quot;2.4&quot;</span><span class="p">)</span> <span class="c1">#noqa</span>
+<span class="k">def</span> <span class="nf">my_api_method</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="nb">id</span><span class="p">):</span>
+    <span class="o">....</span> <span class="n">method_2</span> <span class="o">...</span>
+</pre></div>
+</div>
+<p>If a caller specified <tt class="docutils literal"><span class="pre">2.1</span></tt>, <tt class="docutils literal"><span class="pre">2.2</span></tt> or <tt class="docutils literal"><span class="pre">2.3</span></tt> (or received the
+default of <tt class="docutils literal"><span class="pre">2.1</span></tt>) they would see the result from <tt class="docutils literal"><span class="pre">method_1</span></tt>,
+<tt class="docutils literal"><span class="pre">2.4</span></tt> or later <tt class="docutils literal"><span class="pre">method_2</span></tt>.</p>
+<p>It is vital that the two methods have the same name, so the second of
+them will need <tt class="docutils literal"><span class="pre">#noqa</span></tt> to avoid failing flake8&#8217;s <tt class="docutils literal"><span class="pre">F811</span></tt> rule. The
+two methods may be different in any kind of semantics (schema
+validation, return values, response codes, etc)</p>
+</div>
+<div class="section" id="a-method-with-only-small-changes-between-versions">
+<h3>A method with only small changes between versions<a class="headerlink" href="#a-method-with-only-small-changes-between-versions" title="Permalink to this headline">¶</a></h3>
+<p>A method may have only small changes between microversions, in which
+case you can decorate a private method:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span><span class="nd">@api_version</span><span class="p">(</span><span class="s2">&quot;2.1&quot;</span><span class="p">,</span> <span class="s2">&quot;2.4&quot;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">_version_specific_func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="n">arg1</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="nd">@api_version</span><span class="p">(</span><span class="n">min_version</span><span class="o">=</span><span class="s2">&quot;2.5&quot;</span><span class="p">)</span> <span class="c1">#noqa</span>
+<span class="k">def</span> <span class="nf">_version_specific_func</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="n">arg1</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="k">def</span> <span class="nf">show</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="nb">id</span><span class="p">):</span>
+    <span class="o">....</span> <span class="n">common</span> <span class="n">stuff</span> <span class="o">....</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_version_specific_func</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="s2">&quot;foo&quot;</span><span class="p">)</span>
+    <span class="o">....</span> <span class="n">common</span> <span class="n">stuff</span> <span class="o">....</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="a-change-in-schema-only">
+<h3>A change in schema only<a class="headerlink" href="#a-change-in-schema-only" title="Permalink to this headline">¶</a></h3>
+<p>If there is no change to the method, only to the schema that is used for
+validation, you can add a version range to the <tt class="docutils literal"><span class="pre">validation.schema</span></tt>
+decorator:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span><span class="nd">@wsgi.Controller.api_version</span><span class="p">(</span><span class="s2">&quot;2.1&quot;</span><span class="p">)</span>
+<span class="nd">@validation.schema</span><span class="p">(</span><span class="n">dummy_schema</span><span class="o">.</span><span class="n">dummy</span><span class="p">,</span> <span class="s2">&quot;2.3&quot;</span><span class="p">,</span> <span class="s2">&quot;2.8&quot;</span><span class="p">)</span>
+<span class="nd">@validation.schema</span><span class="p">(</span><span class="n">dummy_schema</span><span class="o">.</span><span class="n">dummy2</span><span class="p">,</span> <span class="s2">&quot;2.9&quot;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="nb">id</span><span class="p">,</span> <span class="n">body</span><span class="p">):</span>
+    <span class="o">....</span>
+</pre></div>
+</div>
+<p>This method will be available from version <tt class="docutils literal"><span class="pre">2.1</span></tt>, validated according to
+<tt class="docutils literal"><span class="pre">dummy_schema.dummy</span></tt> from <tt class="docutils literal"><span class="pre">2.3</span></tt> to <tt class="docutils literal"><span class="pre">2.8</span></tt>, and validated according to
+<tt class="docutils literal"><span class="pre">dummy_schema.dummy2</span></tt> from <tt class="docutils literal"><span class="pre">2.9</span></tt> onward.</p>
+</div>
+<div class="section" id="when-not-using-decorators">
+<h3>When not using decorators<a class="headerlink" href="#when-not-using-decorators" title="Permalink to this headline">¶</a></h3>
+<p>When you don&#8217;t want to use the <tt class="docutils literal"><span class="pre">&#64;api_version</span></tt> decorator on a method
+or you want to change behaviour within a method (say it leads to
+simpler or simply a lot less code) you can directly test for the
+requested version with a method as long as you have access to the api
+request object (commonly called <tt class="docutils literal"><span class="pre">req</span></tt>). Every API method has an
+api_version_request object attached to the req object and that can be
+used to modify behaviour based on its value:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span>def index(self, req):
+    &lt;common code&gt;
+
+    req_ver = req.api_version_request
+    if req_version.matches(&quot;2.1&quot;, &quot;2.5&quot;):
+        ....stuff....
+    elif req_version.matches(&quot;2.6&quot;, &quot;2.10&quot;):
+        ....other stuff....
+    elif req_version &gt; api_version_request.APIVersionRequest(&quot;2.10&quot;):
+        ....more stuff.....
+
+    &lt;common code&gt;
+</pre></div>
+</div>
+<p>The first argument to the matches method is the minimum acceptable version
+and the second is maximum acceptable version. A specified version can be null:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span><span class="n">null_version</span> <span class="o">=</span> <span class="n">APIVersionRequest</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>If the minimum version specified is null then there is no restriction on
+the minimum version, and likewise if the maximum version is null there
+is no restriction the maximum version. Alternatively a one sided comparison
+can be used as in the example above.</p>
+</div>
+</div>
+<div class="section" id="other-necessary-changes">
+<h2>Other necessary changes<a class="headerlink" href="#other-necessary-changes" title="Permalink to this headline">¶</a></h2>
+<p>If you are adding a patch which adds a new microversion, it is
+necessary to add changes to other places which describe your change:</p>
+<ul class="simple">
+<li>Update <tt class="docutils literal"><span class="pre">REST_API_VERSION_HISTORY</span></tt> in
+<tt class="docutils literal"><span class="pre">nova/api/openstack/api_version_request.py</span></tt></li>
+<li>Update <tt class="docutils literal"><span class="pre">_MAX_API_VERSION</span></tt> in
+<tt class="docutils literal"><span class="pre">nova/api/openstack/api_version_request.py</span></tt></li>
+<li>Add a verbose description to
+<tt class="docutils literal"><span class="pre">nova/api/openstack/rest_api_version_history.rst</span></tt>.  There should
+be enough information that it could be used by the docs team for
+release notes.</li>
+</ul>
+</div>
+<div class="section" id="allocating-a-microversion">
+<h2>Allocating a microversion<a class="headerlink" href="#allocating-a-microversion" title="Permalink to this headline">¶</a></h2>
+<p>If you are adding a patch which adds a new microversion, it is
+necessary to allocate the next microversion number. Except under
+extremely unusual circumstances and this would have been mentioned in
+the nova spec for the change, the minor number of <tt class="docutils literal"><span class="pre">_MAX_API_VERSION</span></tt>
+will be incremented. This will also be the new microversion number for
+the API change.</p>
+<p>It is possible that multiple microversion patches would be proposed in
+parallel and the microversions would conflict between patches.  This
+will cause a merge conflict. We don&#8217;t reserve a microversion for each
+patch in advance as we don&#8217;t know the final merge order. Developers
+may need over time to rebase their patch calculating a new version
+number as above based on the updated value of <tt class="docutils literal"><span class="pre">_MAX_API_VERSION</span></tt>.</p>
+</div>
+<div class="section" id="testing-microversioned-api-methods">
+<h2>Testing Microversioned API Methods<a class="headerlink" href="#testing-microversioned-api-methods" title="Permalink to this headline">¶</a></h2>
+<p>Testing a microversioned API method is very similar to a normal controller
+method test, you just need to add the <tt class="docutils literal"><span class="pre">X-OpenStack-Nova-API-Version</span></tt>
+header, for example:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span><span class="n">req</span> <span class="o">=</span> <span class="n">fakes</span><span class="o">.</span><span class="n">HTTPRequest</span><span class="o">.</span><span class="n">blank</span><span class="p">(</span><span class="s1">&#39;/testable/url/endpoint&#39;</span><span class="p">)</span>
+<span class="n">req</span><span class="o">.</span><span class="n">headers</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;X-OpenStack-Nova-API-Version&#39;</span><span class="p">:</span> <span class="s1">&#39;2.2&#39;</span><span class="p">}</span>
+<span class="n">req</span><span class="o">.</span><span class="n">api_version_request</span> <span class="o">=</span> <span class="n">api_version</span><span class="o">.</span><span class="n">APIVersionRequest</span><span class="p">(</span><span class="s1">&#39;2.6&#39;</span><span class="p">)</span>
+
+<span class="n">controller</span> <span class="o">=</span> <span class="n">controller</span><span class="o">.</span><span class="n">TestableController</span><span class="p">()</span>
+
+<span class="n">res</span> <span class="o">=</span> <span class="n">controller</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
+<span class="o">...</span> <span class="n">assertions</span> <span class="n">about</span> <span class="n">the</span> <span class="n">response</span> <span class="o">...</span>
+</pre></div>
+</div>
+<p>For many examples of testing, the canonical examples are in
+<tt class="docutils literal"><span class="pre">nova/tests/unit/api/openstack/compute/test_microversions.py</span></tt>.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">API Microversions</a><ul>
+<li><a class="reference internal" href="#background">Background</a></li>
+<li><a class="reference internal" href="#in-code">In Code</a><ul>
+<li><a class="reference internal" href="#adding-a-new-api-method">Adding a new API method</a></li>
+<li><a class="reference internal" href="#removing-an-api-method">Removing an API method</a></li>
+<li><a class="reference internal" href="#changing-a-method-s-behaviour">Changing a method&#8217;s behaviour</a></li>
+<li><a class="reference internal" href="#a-method-with-only-small-changes-between-versions">A method with only small changes between versions</a></li>
+<li><a class="reference internal" href="#a-change-in-schema-only">A change in schema only</a></li>
+<li><a class="reference internal" href="#when-not-using-decorators">When not using decorators</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#other-necessary-changes">Other necessary changes</a></li>
+<li><a class="reference internal" href="#allocating-a-microversion">Allocating a microversion</a></li>
+<li><a class="reference internal" href="#testing-microversioned-api-methods">Testing Microversioned API Methods</a></li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="api_plugins.html"
+                                  title="previous chapter">API Plugins</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="architecture.html"
+                                  title="next chapter">Nova System Architecture</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/devref/api_microversions.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="architecture.html" title="Nova System Architecture"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="api_plugins.html" title="API Plugins"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Developer Guide</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

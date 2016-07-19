@@ -1,0 +1,216 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Versions &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="prev" title="Request and response formats" href="request_and_response_formats.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="versions">
+<h1>Versions<a class="headerlink" href="#versions" title="Permalink to this headline">¶</a></h1>
+<p>The OpenStack Compute API uses both a URI and a MIME type versioning
+scheme. In the URI scheme, the first element of the path contains the
+target version identifier (e.g. <a class="reference external" href="https://servers.api.openstack.org/">https://servers.api.openstack.org/</a>
+v2.0/...). The MIME type versioning scheme uses HTTP content negotiation
+where the <tt class="docutils literal"><span class="pre">Accept</span></tt> or <tt class="docutils literal"><span class="pre">Content-Type</span></tt> headers contains a MIME type
+that identifies the version (application/vnd.openstack.compute.v2+json).
+A version MIME type is always linked to a base MIME type, such as
+application/json. If conflicting versions are specified using both an HTTP
+header and a URI, the URI takes precedence.</p>
+<p><strong>Example:&nbsp;Request with MIME type versioning</strong></p>
+<div class="code highlight-python"><div class="highlight"><pre><span></span>GET /214412/images HTTP/1.1
+Host: servers.api.openstack.org
+Accept: application/vnd.openstack.compute.v2+json
+X-Auth-Token: eaaafd18-0fed-4b3a-81b4-663c99ec1cbb
+</pre></div>
+</div>
+<p><strong>Example:&nbsp;Request with URI versioning</strong></p>
+<div class="code highlight-python"><div class="highlight"><pre><span></span>GET /v2/214412/images HTTP/1.1
+Host: servers.api.openstack.org
+Accept: application/json
+X-Auth-Token: eaaafd18-0fed-4b3a-81b4-663c99ec1cbb
+</pre></div>
+</div>
+<div class="section" id="permanent-links">
+<h2>Permanent Links<a class="headerlink" href="#permanent-links" title="Permalink to this headline">¶</a></h2>
+<p>The MIME type versioning approach allows for the creating of permanent
+links, because the version scheme is not specified in the URI path:
+<a class="reference external" href="https://api.servers.openstack.org/224532/servers/123">https://api.servers.openstack.org/224532/servers/123</a>.</p>
+<p>If a request is made without a version specified in the URI or via HTTP
+headers, then a multiple-choices response (300) follows that provides
+links and MIME types to available versions.</p>
+<p><strong>Example:&nbsp;Multiple choices: JSON response</strong></p>
+<div class="code highlight-python"><div class="highlight"><pre><span></span><span class="p">{</span>
+   <span class="s2">&quot;choices&quot;</span><span class="p">:[</span>
+      <span class="p">{</span>
+         <span class="s2">&quot;id&quot;</span><span class="p">:</span><span class="s2">&quot;v1.0&quot;</span><span class="p">,</span>
+         <span class="s2">&quot;status&quot;</span><span class="p">:</span><span class="s2">&quot;DEPRECATED&quot;</span><span class="p">,</span>
+         <span class="s2">&quot;links&quot;</span><span class="p">:[</span>
+            <span class="p">{</span>
+               <span class="s2">&quot;rel&quot;</span><span class="p">:</span><span class="s2">&quot;self&quot;</span><span class="p">,</span>
+               <span class="s2">&quot;href&quot;</span><span class="p">:</span><span class="s2">&quot;http://servers.api.openstack.org/v1.0/1234/servers/52415800-8b69-11e0-9b19-734f6af67565&quot;</span>
+            <span class="p">}</span>
+         <span class="p">],</span>
+         <span class="s2">&quot;media-types&quot;</span><span class="p">:[</span>
+            <span class="p">{</span>
+               <span class="s2">&quot;base&quot;</span><span class="p">:</span><span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
+               <span class="s2">&quot;type&quot;</span><span class="p">:</span><span class="s2">&quot;application/vnd.openstack.compute.v1.0+json&quot;</span>
+            <span class="p">}</span>
+         <span class="p">]</span>
+      <span class="p">},</span>
+      <span class="p">{</span>
+         <span class="s2">&quot;id&quot;</span><span class="p">:</span><span class="s2">&quot;v2&quot;</span><span class="p">,</span>
+         <span class="s2">&quot;status&quot;</span><span class="p">:</span><span class="s2">&quot;CURRENT&quot;</span><span class="p">,</span>
+         <span class="s2">&quot;links&quot;</span><span class="p">:[</span>
+            <span class="p">{</span>
+               <span class="s2">&quot;rel&quot;</span><span class="p">:</span><span class="s2">&quot;self&quot;</span><span class="p">,</span>
+               <span class="s2">&quot;href&quot;</span><span class="p">:</span><span class="s2">&quot;http://servers.api.openstack.org/v2/1234/servers/52415800-8b69-11e0-9b19-734f6af67565&quot;</span>
+            <span class="p">}</span>
+         <span class="p">],</span>
+         <span class="s2">&quot;media-types&quot;</span><span class="p">:[</span>
+            <span class="p">{</span>
+               <span class="s2">&quot;base&quot;</span><span class="p">:</span><span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
+               <span class="s2">&quot;type&quot;</span><span class="p">:</span><span class="s2">&quot;application/vnd.openstack.compute.v2+json&quot;</span>
+            <span class="p">}</span>
+         <span class="p">]</span>
+      <span class="p">}</span>
+   <span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>New features and functionality that do not break API-compatibility are
+introduced in the current version of the API as extensions and the URI and MIME
+types remain unchanged. Features or functionality changes that would necessitate a break in API-compatibility require a new version, which results
+in URI and MIME type version being updated accordingly. When new API versions
+are released, older versions are marked as <tt class="docutils literal"><span class="pre">DEPRECATED</span></tt>. Providers should
+work with developers and partners to ensure there is adequate time to
+migrate to the new version before deprecated versions are discontinued.</p>
+<p>Your application can programmatically determine available API versions
+by performing a <strong>GET</strong> on the root URL (i.e. with the version and
+everything to the right of it truncated) returned from the
+authentication system.</p>
+<p>You can also obtain additional information about a specific version by
+performing a <strong>GET</strong> on the base version URL (such as,
+<tt class="docutils literal"><span class="pre">https://servers.api.openstack.org/v2/</span></tt>). Version request URLs must
+always end with a trailing slash (<tt class="docutils literal"><span class="pre">/</span></tt>). If you omit the slash, the
+server might respond with a 302 redirection request. Format extensions
+can be placed after the slash (such as,
+<tt class="docutils literal"><span class="pre">https://servers.api.openstack.org/v2/.json</span></tt>).</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">This special case does not hold true for other API requests. In
+general, requests such as <tt class="docutils literal"><span class="pre">/servers.json</span></tt> and <tt class="docutils literal"><span class="pre">/servers/.json</span></tt> are
+handled equivalently.</p>
+</div>
+<p>For examples of the list versions and get version details requests and
+responses, see <a class="reference external" href="http://developer.openstack.org/api-ref-compute-v2.html#compute_versions">*API versions*</a>.</p>
+<p>The detailed version response contains pointers to both a human-readable
+and a machine-processable description of the API service. The
+machine-processable description is written in the Web Application
+Description Language (WADL).</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">Versions</a><ul>
+<li><a class="reference internal" href="#permanent-links">Permanent Links</a></li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="request_and_response_formats.html"
+                                  title="previous chapter">Request and response formats</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/v2/versions.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="request_and_response_formats.html" title="Request and response formats"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,72 @@
+diff -aruN nova-2015.1.0/nova/virt/libvirt/config.py nova-2015.1.0.org/nova/virt/libvirt/config.py
+--- nova-2015.1.0/nova/virt/libvirt/config.py	2016-05-16 20:07:02.691041036 +0800
++++ nova-2015.1.0.org/nova/virt/libvirt/config.py	2016-05-16 18:04:09.218836135 +0800
+@@ -1341,24 +1341,6 @@
+         dev.set("model", self.type)
+         return dev
+ 
+-class LibvirtConfigGuestRedirFilter(LibvirtConfigGuestDevice):#xinda
+-    def __init__(self, **kwargs):
+-        super(LibvirtConfigGuestRedirFilter, self).__init__(root_name="redirfilter",**kwargs)
+-        self.usbclass = "0x08"
+-        self.allow = "no"
+-    def format_dom(self):
+-        dev = super(LibvirtConfigGuestRedirFilter, self).format_dom()
+-        usbdev = etree.Element("usbdev")
+-        usbdev.set("class", self.usbclass)
+-        usbdev.set("allow",self.allow)
+-	dev.append(usbdev)
+-	usbdev2 = etree.Element("usbdev")
+-	usbdev2.set("allow","yes")
+-	dev.append(usbdev2)
+-        return dev
+-
+-
+-
+ class LibvirtConfigGuestUsbRed(LibvirtConfigGuestDevice):#wz
+     def __init__(self, **kwargs):
+         super(LibvirtConfigGuestUsbRed, self).__init__(root_name="redirdev",**kwargs)
+diff -aruN nova-2015.1.0/nova/virt/libvirt/driver.py nova-2015.1.0.org/nova/virt/libvirt/driver.py
+--- nova-2015.1.0/nova/virt/libvirt/driver.py	2016-05-16 20:05:40.388904805 +0800
++++ nova-2015.1.0.org/nova/virt/libvirt/driver.py	2016-05-16 18:04:09.218836135 +0800
+@@ -4252,16 +4252,13 @@
+             LOG.warn('cs2c-------meta----------- %s ' % (str(instance.metadata)))
+             self._add_video_driver(guest, image_meta, img_meta_prop, flavor)
+       
+-        #add usb redirect #xinda
+-      # if instance.metadata.get('usb_redirect_flag') == None or instance.metadata.get('usb_redirect_flag') == '1':
+-        usbred = vconfig.LibvirtConfigGuestUsbRed()
+-        usbred2 =  vconfig.LibvirtConfigGuestUsbRed()
+-        guest.add_device(usbred)
+-        guest.add_device(usbred2)
+-        if instance.metadata.get('usb_redirect_flag') == '0':
+-	    usbfilter = vconfig.LibvirtConfigGuestRedirFilter()
+-	    guest.add_device(usbfilter)	
+-	    
++        #add usb redirect wz
++        if instance.metadata.get('usb_redirect_flag') == None or instance.metadata.get('usb_redirect_flag') == '1':
++            usbred = vconfig.LibvirtConfigGuestUsbRed()
++            usbred2 =  vconfig.LibvirtConfigGuestUsbRed()
++            guest.add_device(usbred)
++            guest.add_device(usbred2)
++
+         # Qemu guest agent only support 'qemu' and 'kvm' hypervisor
+         if virt_type in ('qemu', 'kvm'):
+             self._set_qemu_guest_agent(guest, flavor, instance, img_meta_prop)
+@@ -4307,7 +4304,6 @@
+                 balloon.model = 'xen'
+             balloon.period = CONF.libvirt.mem_stats_period_seconds
+             guest.add_device(balloon)
+-	LOG.warn('ieu config------------------')
+         LOG.warn('cs2c------------------ %s' % str(guest))
+         return guest
+ 
+@@ -4338,7 +4334,7 @@
+             instance_dir = libvirt_utils.get_instance_path(instance)
+             xml_path = os.path.join(instance_dir, 'libvirt.xml')
+             libvirt_utils.write_to_file(xml_path, xml)
+-	LOG.warn('ieu xml------------------')
++
+         LOG.debug('End _get_guest_xml xml=%(xml)s',
+                   {'xml': xml}, instance=instance)
+         return xml

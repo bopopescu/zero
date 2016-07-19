@@ -1,0 +1,248 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Upgrades &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="up" title="Developer Guide" href="index.html" />
+    <link rel="next" title="Rest API Policy Enforcement" href="policy_enforcement.html" />
+    <link rel="prev" title="Hooks" href="hooks.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="upgrades">
+<h1>Upgrades<a class="headerlink" href="#upgrades" title="Permalink to this headline">¶</a></h1>
+<p>Nova aims to provide upgrades with minimal downtime.</p>
+<p>Firstly, the data plane. There should be no VM downtime when you upgrade
+Nova. Nova has had this since the early days, with the exception of
+some nova-network related services.</p>
+<p>Secondly, we want no downtime during upgrades of the Nova control plane.
+This document is trying to describe how we can achieve that.</p>
+<p>Once we have introduced the key concepts relating to upgrade, we will
+introduce the process needed for a no downtime upgrade of nova.</p>
+<div class="section" id="concepts">
+<h2>Concepts<a class="headerlink" href="#concepts" title="Permalink to this headline">¶</a></h2>
+<p>Here are the key concepts you need to know before reading the section on the
+upgrade process:</p>
+<dl class="docutils">
+<dt>RPC version pinning</dt>
+<dd>Through careful RPC versioning, newer nodes are able to talk to older
+nova-compute nodes. When upgrading control plane nodes, we can pin them
+at an older version of the compute RPC API, until all the compute nodes
+are able to be upgraded.
+<a class="reference external" href="https://wiki.openstack.org/wiki/RpcMajorVersionUpdates">https://wiki.openstack.org/wiki/RpcMajorVersionUpdates</a></dd>
+<dt>Online Configuration Reload</dt>
+<dd>During the upgrade, we pin new serves at the older RPC version. When all
+services are updated to use newer code, we need to unpin them so we are
+able to use any new functionality.
+To avoid having to restart the service, using the current SIGHUP signal
+handling, or otherwise, ideally we need a way to update the currently
+running process to use the latest configuration.</dd>
+<dt>Graceful service shutdown</dt>
+<dd>Many nova services are python processes listening for messages on a
+AMQP queue, including nova-compute. When sending the process the SIGTERM
+the process stops getting new work from its queue, completes any
+outstanding work, then terminates. During this process, messages can be
+left on the queue for when the python process starts back up.
+This gives us a way to shutdown a service using older code, and start
+up a service using newer code with minimal impact. If its a service that
+can have multiple workers, like nova-conductor, you can usually add the
+new workers before the graceful shutdown of the old workers. In the case
+of singleton services, like nova-compute, some actions could be delayed
+during the restart, but ideally no actions should fail due to the restart.
+NOTE: while this is true for the RabbitMQ RPC backend, we need to confirm
+what happens for other RPC backends.</dd>
+<dt>API load balancer draining</dt>
+<dd>When upgrading API nodes, you can make your load balancer only send new
+connections to the newer API nodes, allowing for a seamless update of your
+API nodes.</dd>
+<dt>Expand/Contract DB Migrations</dt>
+<dd>Modern databases are able to make many schema changes while you are still
+writing to the database. Taking this a step further, we can make all DB
+changes by first adding the new structures, expanding. Then you can slowly
+move all the data into a new location and format. Once that is complete,
+you can drop bits of the scheme that are no long needed, i.e. contract.
+We have plans to implement this here:
+<a class="reference external" href="https://review.openstack.org/#/c/102545/5/specs/juno/online-schema-changes.rst,cm">https://review.openstack.org/#/c/102545/5/specs/juno/online-schema-changes.rst,cm</a></dd>
+<dt>Online Data Migrations using objects</dt>
+<dd>In Kilo we are moving all data migration into the DB objects code.
+When trying to migrate data in the database from the old format to the
+new format, this is done in the object code when reading or saving things
+that are in the old format. For records that are not updated, you need to
+run a background process to convert those records into the newer format.
+This process must be completed before you contract the database schema.
+We have the first example of this happening here:
+<a class="reference external" href="http://specs.openstack.org/openstack/nova-specs/specs/kilo/approved/flavor-from-sysmeta-to-blob.html">http://specs.openstack.org/openstack/nova-specs/specs/kilo/approved/flavor-from-sysmeta-to-blob.html</a></dd>
+<dt>DB prune deleted rows</dt>
+<dd>Currently resources are soft deleted in the database, so users are able
+to track instances in the DB that are created and destroyed in production.
+However, most people have a data retention policy, of say 30 days or 90
+days after which they will want to delete those entries. Not deleting
+those entries affects DB performance as indices grow very large and data
+migrations take longer as there is more data to migrate.</dd>
+<dt>nova-conductor object backports</dt>
+<dd>RPC pinning ensures new services can talk to the older service&#8217;s method
+signatures. But many of the parameters are objects that may well be too
+new for the old service to understand, so you are able to send the object
+back to the nova-conductor to be downgraded to a version the older service
+can understand.</dd>
+</dl>
+</div>
+<div class="section" id="process">
+<h2>Process<a class="headerlink" href="#process" title="Permalink to this headline">¶</a></h2>
+<dl class="docutils">
+<dt>NOTE:</dt>
+<dd>This still requires much work before it can become reality.
+This is more an aspirational plan that helps describe how all the
+pieces of the jigsaw fit together.</dd>
+</dl>
+<p>This is the planned process for a zero downtime upgrade:</p>
+<ol class="arabic simple">
+<li>Prune deleted DB rows, check previous migrations are complete</li>
+<li>Expand DB schema (e.g. add new column)</li>
+<li>Pin RPC versions for all services that are upgraded from this point,
+using the current version</li>
+<li>Upgrade all nova-conductor nodes (to do object backports)</li>
+<li>Upgrade all other services, except nova-compute and nova-api,
+using graceful shutdown</li>
+<li>Upgrade nova-compute nodes (this is the bulk of the work).</li>
+<li>Unpin RPC versions</li>
+<li>Add new API nodes, and enable new features, while using a load balancer
+to &#8220;drain&#8221; the traffic from old API nodes</li>
+<li>Run the new nova-manage command that ensures all DB records are &#8220;upgraded&#8221;
+to new data version</li>
+<li>&#8220;Contract&#8221; DB schema (e.g. drop unused columns)</li>
+</ol>
+</div>
+<div class="section" id="testing">
+<h2>Testing<a class="headerlink" href="#testing" title="Permalink to this headline">¶</a></h2>
+<p>Once we have all the pieces in place, we hope to move the Grenade testing
+to follow this new pattern.</p>
+<p>The current tests only cover the existing upgrade process where:
+* old computes can run with new control plane
+* but control plane is turned off for DB migrations</p>
+</div>
+<div class="section" id="unresolved-issues">
+<h2>Unresolved issues<a class="headerlink" href="#unresolved-issues" title="Permalink to this headline">¶</a></h2>
+<p>Ideally you could rollback. We would need to add some kind of object data
+version pinning, so you can be running all new code to some extent, before
+there is no path back. Or have some way of reversing the data migration
+before the final contract.</p>
+<p>It is unknown how expensive on demand object backports would be. We could
+instead always send older versions of objects until the RPC pin is removed,
+but that means we might have new code getting old objects, which is currently
+not the case.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">Upgrades</a><ul>
+<li><a class="reference internal" href="#concepts">Concepts</a></li>
+<li><a class="reference internal" href="#process">Process</a></li>
+<li><a class="reference internal" href="#testing">Testing</a></li>
+<li><a class="reference internal" href="#unresolved-issues">Unresolved issues</a></li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="hooks.html"
+                                  title="previous chapter">Hooks</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="policy_enforcement.html"
+                                  title="next chapter">Rest API Policy Enforcement</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/devref/upgrade.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="policy_enforcement.html" title="Rest API Policy Enforcement"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="hooks.html" title="Hooks"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Developer Guide</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

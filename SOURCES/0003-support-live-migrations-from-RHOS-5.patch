@@ -1,0 +1,58 @@
+From 830633b5908854dbcc382a30a73cdd5278556640 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?P=C3=A1draig=20Brady?= <pbrady@redhat.com>
+Date: Mon, 15 Dec 2014 22:33:33 +0000
+Subject: [PATCH] support live migrations from RHOS 5
+
+RHOS 5 contains a backport for bug 1110367
+supporting the new nova live migration restrictions.
+
+* nova/compute/rpcapi.py (_check_live_migration_api_version):
+Adjust the version to match the backport in RHOS 5.
+
+This needs to be backported until we no longer
+need to support migrating from (and to) RHOS 5.
+
+Resolves rhbz: 1174418
+
+Change-Id: I69883c1b73b267fdf18a74f07c7ba49a82700cb2
+Reviewed-on: https://code.engineering.redhat.com/gerrit/38592
+Reviewed-by: Padraig Brady <pbrady@redhat.com>
+Tested-by: Padraig Brady <pbrady@redhat.com>
+---
+ nova/compute/rpcapi.py | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/nova/compute/rpcapi.py b/nova/compute/rpcapi.py
+index 9ea7755..c1e0d6f 100644
+--- a/nova/compute/rpcapi.py
++++ b/nova/compute/rpcapi.py
+@@ -402,6 +402,8 @@ class ComputeAPI(object):
+             version = '4.0'
+         elif self.client.can_send_version('3.32'):
+             version = '3.32'
++        elif self.client.can_send_version('3.23.1'):
++            version = '3.23.1'
+         else:
+             version = '3.0'
+             self._warn_buggy_live_migrations()
+@@ -416,6 +418,8 @@ class ComputeAPI(object):
+             version = '4.0'
+         elif self.client.can_send_version('3.32'):
+             version = '3.32'
++        elif self.client.can_send_version('3.23.1'):
++            version = '3.23.1'
+         else:
+             version = '3.0'
+             self._warn_buggy_live_migrations()
+@@ -785,6 +789,11 @@ class ComputeAPI(object):
+             extra = {'destroy_disks': destroy_disks,
+                      'migrate_data': migrate_data,
+                  }
++        elif self.client.can_send_version('3.23.1'):
++            version = '3.23.1'
++            extra = {'destroy_disks': destroy_disks,
++                     'migrate_data': migrate_data,
++                 }
+         else:
+             version = '3.0'
+             extra = {}

@@ -1,0 +1,278 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Faults &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="next" title="Compute API v2" href="index.html" />
+    <link rel="prev" title="Extensions" href="extensions.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="faults">
+<h1>Faults<a class="headerlink" href="#faults" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="synchronous-faults">
+<h2>Synchronous faults<a class="headerlink" href="#synchronous-faults" title="Permalink to this headline">¶</a></h2>
+<p>When an error occurs at request time, the system also returns additional
+information about the fault in the body of the response.</p>
+<p><strong>Example:&nbsp;Fault: JSON response</strong></p>
+<div class="code highlight-python"><div class="highlight"><pre><span></span><span class="p">{</span>
+   <span class="s2">&quot;computeFault&quot;</span><span class="p">:{</span>
+      <span class="s2">&quot;code&quot;</span><span class="p">:</span><span class="mi">500</span><span class="p">,</span>
+      <span class="s2">&quot;message&quot;</span><span class="p">:</span><span class="s2">&quot;Fault!&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;details&quot;</span><span class="p">:</span><span class="s2">&quot;Error Details...&quot;</span>
+   <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The error code is returned in the body of the response for convenience.
+The message section returns a human-readable message that is appropriate
+for display to the end user. The details section is optional and may
+contain information—for example, a stack trace—to assist in tracking
+down an error. The detail section might or might not be appropriate for
+display to an end user.</p>
+<p>The root element of the fault (such as, computeFault) might change
+depending on the type of error. The following is a list of possible
+elements along with their associated error codes.</p>
+<div class="section" id="fault-elements-and-error-codes">
+<h3>Fault elements and error codes<a class="headerlink" href="#fault-elements-and-error-codes" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><tt class="docutils literal"><span class="pre">computeFault</span></tt>: 500, 400, other codes possible</li>
+<li><tt class="docutils literal"><span class="pre">notImplemented</span></tt>: 501</li>
+<li><tt class="docutils literal"><span class="pre">serverCapacityUnavailable</span></tt>: 503</li>
+<li><tt class="docutils literal"><span class="pre">serviceUnavailable</span></tt>: 503</li>
+<li><tt class="docutils literal"><span class="pre">badRequest</span></tt>: 400</li>
+<li><tt class="docutils literal"><span class="pre">unauthorized</span></tt>: 401</li>
+<li><tt class="docutils literal"><span class="pre">forbidden</span></tt>: 403</li>
+<li><tt class="docutils literal"><span class="pre">resizeNotAllowed</span></tt>: 403</li>
+<li><tt class="docutils literal"><span class="pre">itemNotFound</span></tt>: 404</li>
+<li><tt class="docutils literal"><span class="pre">badMethod</span></tt>: 405</li>
+<li><tt class="docutils literal"><span class="pre">backupOrResizeInProgress</span></tt>: 409</li>
+<li><tt class="docutils literal"><span class="pre">buildInProgress</span></tt>: 409</li>
+<li><tt class="docutils literal"><span class="pre">conflictingRequest</span></tt>: 409</li>
+<li><tt class="docutils literal"><span class="pre">overLimit</span></tt>: 413</li>
+<li><tt class="docutils literal"><span class="pre">badMediaType</span></tt>: 415</li>
+</ul>
+<p><strong>Example:&nbsp;Item Not Found fault: JSON response</strong></p>
+<div class="code highlight-python"><div class="highlight"><pre><span></span><span class="p">{</span>
+   <span class="s2">&quot;itemNotFound&quot;</span><span class="p">:{</span>
+      <span class="s2">&quot;code&quot;</span><span class="p">:</span><span class="mi">404</span><span class="p">,</span>
+      <span class="s2">&quot;message&quot;</span><span class="p">:</span><span class="s2">&quot;Not Found&quot;</span><span class="p">,</span>
+      <span class="s2">&quot;details&quot;</span><span class="p">:</span><span class="s2">&quot;Error Details...&quot;</span>
+   <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>From an XML schema perspective, all API faults are extensions of the
+base ComputeAPIFault fault type. When working with a system that binds
+XML to actual classes (such as JAXB), you should use ComputeAPIFault as
+a catch-all if you do not want to distinguish between individual fault
+types.</p>
+<p>The OverLimit fault is generated when a rate limit threshold is
+exceeded. For convenience, the fault adds a retryAfter attribute that
+contains the content of the Retry-After header in XML Schema 1.0
+date/time format.</p>
+<p><strong>Example:&nbsp;Over Limit fault: JSON response</strong></p>
+<div class="code highlight-python"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;overLimit&quot;</span> <span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;code&quot;</span> <span class="p">:</span> <span class="mi">413</span><span class="p">,</span>
+        <span class="s2">&quot;message&quot;</span> <span class="p">:</span> <span class="s2">&quot;OverLimit Retry...&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;details&quot;</span> <span class="p">:</span> <span class="s2">&quot;Error Details...&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;retryAfter&quot;</span> <span class="p">:</span> <span class="s2">&quot;2010-08-01T00:00:00Z&quot;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="section" id="asynchronous-faults">
+<h2>Asynchronous faults<a class="headerlink" href="#asynchronous-faults" title="Permalink to this headline">¶</a></h2>
+<p>An error may occur in the background while a server or image is being
+built or while a server is executing an action. In these cases, the
+server or image is placed in an <tt class="docutils literal"><span class="pre">ERROR</span></tt> state and the fault is
+embedded in the offending server or image. Note that these asynchronous
+faults follow the same format as the synchronous ones. The fault
+contains an error code, a human readable message, and optional details
+about the error. Additionally, asynchronous faults may also contain a
+created timestamp that specify when the fault occurred.</p>
+<p><strong>Example:&nbsp;Server in error state: JSON response</strong></p>
+<div class="code highlight-python"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;server&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="s2">&quot;52415800-8b69-11e0-9b19-734f0000ffff&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;tenant_id&quot;</span><span class="p">:</span> <span class="s2">&quot;1234&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="s2">&quot;5678&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;sample-server&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;created&quot;</span><span class="p">:</span> <span class="s2">&quot;2010-08-10T12:00:00Z&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;hostId&quot;</span><span class="p">:</span> <span class="s2">&quot;e4d909c290d0fb1ca068ffafff22cbd0&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;ERROR&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;progress&quot;</span><span class="p">:</span> <span class="mi">66</span><span class="p">,</span>
+        <span class="s2">&quot;image&quot;</span> <span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="s2">&quot;52415800-8b69-11e0-9b19-734f6f007777&quot;</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;flavor&quot;</span> <span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="s2">&quot;52415800-8b69-11e0-9b19-734f216543fd&quot;</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;fault&quot;</span> <span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;code&quot;</span> <span class="p">:</span> <span class="mi">404</span><span class="p">,</span>
+            <span class="s2">&quot;created&quot;</span><span class="p">:</span> <span class="s2">&quot;2010-08-10T11:59:59Z&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;message&quot;</span> <span class="p">:</span> <span class="s2">&quot;Could not find image 52415800-8b69-11e0-9b19-734f6f007777&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;details&quot;</span> <span class="p">:</span> <span class="s2">&quot;Fault details&quot;</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;links&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;rel&quot;</span><span class="p">:</span> <span class="s2">&quot;self&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;href&quot;</span><span class="p">:</span> <span class="s2">&quot;http://servers.api.openstack.org/v2/1234/servers/52415800-8b69-11e0-9b19-734f000004d2&quot;</span>
+            <span class="p">},</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;rel&quot;</span><span class="p">:</span> <span class="s2">&quot;bookmark&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;href&quot;</span><span class="p">:</span> <span class="s2">&quot;http://servers.api.openstack.org/1234/servers/52415800-8b69-11e0-9b19-734f000004d2&quot;</span>
+            <span class="p">}</span>
+        <span class="p">]</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>Example:&nbsp;Image in error state: JSON response</strong></p>
+<div class="code highlight-python"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;image&quot;</span> <span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;id&quot;</span> <span class="p">:</span> <span class="s2">&quot;52415800-8b69-11e0-9b19-734f5736d2a2&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;name&quot;</span> <span class="p">:</span> <span class="s2">&quot;My Server Backup&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;created&quot;</span> <span class="p">:</span> <span class="s2">&quot;2010-08-10T12:00:00Z&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;status&quot;</span> <span class="p">:</span> <span class="s2">&quot;SAVING&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;progress&quot;</span> <span class="p">:</span> <span class="mi">89</span><span class="p">,</span>
+        <span class="s2">&quot;server&quot;</span> <span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="s2">&quot;52415800-8b69-11e0-9b19-734f335aa7b3&quot;</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;fault&quot;</span> <span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;code&quot;</span> <span class="p">:</span> <span class="mi">500</span><span class="p">,</span>
+            <span class="s2">&quot;message&quot;</span> <span class="p">:</span> <span class="s2">&quot;An internal error occurred&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;details&quot;</span> <span class="p">:</span> <span class="s2">&quot;Error details&quot;</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;links&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;rel&quot;</span> <span class="p">:</span> <span class="s2">&quot;self&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;href&quot;</span> <span class="p">:</span> <span class="s2">&quot;http://servers.api.openstack.org/v2/1234/images/52415800-8b69-11e0-9b19-734f5736d2a2&quot;</span>
+            <span class="p">},</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;rel&quot;</span> <span class="p">:</span> <span class="s2">&quot;bookmark&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;href&quot;</span> <span class="p">:</span> <span class="s2">&quot;http://servers.api.openstack.org/1234/images/52415800-8b69-11e0-9b19-734f5736d2a2&quot;</span>
+            <span class="p">}</span>
+        <span class="p">]</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">Faults</a><ul>
+<li><a class="reference internal" href="#synchronous-faults">Synchronous faults</a><ul>
+<li><a class="reference internal" href="#fault-elements-and-error-codes">Fault elements and error codes</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#asynchronous-faults">Asynchronous faults</a></li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="extensions.html"
+                                  title="previous chapter">Extensions</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="index.html"
+                                  title="next chapter">Compute API v2</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/v2/faults.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="index.html" title="Compute API v2"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="extensions.html" title="Extensions"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

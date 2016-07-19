@@ -1,0 +1,301 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Virtual Machine States and Transitions &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="up" title="Developer Guide" href="index.html" />
+    <link rel="next" title="Internationalization" href="i18n.html" />
+    <link rel="prev" title="Threading model" href="threading.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="virtual-machine-states-and-transitions">
+<h1>Virtual Machine States and Transitions<a class="headerlink" href="#virtual-machine-states-and-transitions" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="preconditions-for-commands">
+<h2>Preconditions for commands<a class="headerlink" href="#preconditions-for-commands" title="Permalink to this headline">¶</a></h2>
+<p>The following diagrams show the required virtual machine (VM) states and
+task states for various commands issued by the user:</p>
+<p class="graphviz">
+<img src="../_images/graphviz-dd46709819e175b0fbe79f25a7866abfc0bcf5e0.png" alt="digraph states {
+  node [fontsize=10 fontname=&quot;Monospace&quot;]
+  /* states */
+  building [label=&quot;BUILDING&quot;]
+
+  active [label=&quot;ACTIVE&quot;]
+  paused [label=&quot;PAUSED&quot;]
+  suspended [label=&quot;SUSPENDED&quot;]
+  stopped [label=&quot;STOPPED&quot;]
+  rescued [label=&quot;RESCUED&quot;]
+  resized [label=&quot;RESIZED&quot;]
+  soft_deleted [label=&quot;SOFT_DELETED&quot;]
+  deleted [label=&quot;DELETED&quot;]
+  error [label=&quot;ERROR&quot;]
+  shelved [label=&quot;SHELVED&quot;]
+  shelved_offloaded [label=&quot;SHELVED_OFFLOADED&quot;]
+
+  /* apis */
+  create [shape=&quot;rectangle&quot;]
+  create -&gt; active
+  create -&gt; error
+  building -&gt; create
+
+  delete [shape=&quot;rectangle&quot;]
+  delete -&gt; deleted
+  building -&gt; delete
+  paused -&gt; delete
+  suspended -&gt; delete
+  stopped -&gt; delete
+  rescued -&gt; delete
+  soft_deleted -&gt; delete
+  error -&gt; delete
+
+  soft_delete [shape=&quot;rectangle&quot;]
+  soft_delete -&gt; soft_deleted
+  soft_delete -&gt; error
+  active -&gt; soft_delete
+  stopped -&gt; soft_delete
+
+  restore [shape=&quot;rectangle&quot;]
+  restore -&gt; active
+  restore -&gt; error
+  soft_deleted -&gt; restore
+
+  pause [shape=&quot;rectangle&quot;]
+  pause -&gt; paused
+  pause -&gt; error
+  active -&gt; pause
+
+  unpause [shape=&quot;rectangle&quot;]
+  unpause -&gt; active
+  unpause -&gt; error
+  paused -&gt; unpause
+
+  suspend [shape=&quot;rectangle&quot;]
+  suspend -&gt; suspended
+  suspend -&gt; error
+  active -&gt; suspend
+
+  resume [shape=&quot;rectangle&quot;]
+  resume -&gt; active
+  resume -&gt; error
+  suspended -&gt; resume
+
+  start [shape=&quot;rectangle&quot;]
+  start -&gt; active
+  start -&gt; error
+  stopped -&gt; start
+
+  stop [shape=&quot;rectangle&quot;]
+  stop -&gt; stopped
+  stop -&gt; error
+  active -&gt; stop
+  error -&gt; stop
+
+  rescue [shape=&quot;rectangle&quot;]
+  rescue -&gt; rescued
+  rescue -&gt; error
+  active -&gt; rescue
+  stopped -&gt; rescue
+  error -&gt; rescue
+
+  unrescue [shape=&quot;rectangle&quot;]
+  unrescue -&gt; active
+  rescued -&gt; unrescue
+
+  resize [shape=&quot;rectangle&quot;]
+  resize -&gt; resized
+  resize -&gt; error
+  active -&gt; resize
+  stopped -&gt; resize
+
+  confirm_resize [shape=&quot;rectangle&quot;]
+  confirm_resize -&gt; active
+  confirm_resize -&gt; error
+  resized -&gt; confirm_resize
+  confirm_resize [shape=&quot;rectangle&quot;]
+
+  revert_resize -&gt; active
+  revert_resize -&gt; error
+  resized -&gt; revert_resize
+
+  snapshot [shape=&quot;rectangle&quot;]
+  snapshot -&gt; active
+  snapshot -&gt; stopped
+  snapshot -&gt; error
+  active -&gt; snapshot
+  stopped -&gt; snapshot
+
+  backup [shape=&quot;rectangle&quot;]
+  backup -&gt; active
+  backup -&gt; stopped
+  backup -&gt; error
+  active -&gt; backup
+  stopped -&gt; backup
+
+  rebuild [shape=&quot;rectangle&quot;]
+  rebuild -&gt; active
+  rebuild -&gt; error
+  active -&gt; rebuild
+  stopped -&gt; rebuild
+
+  set_admin_password [shape=&quot;rectangle&quot;]
+  set_admin_password -&gt; active
+  set_admin_password -&gt; error
+  active -&gt; set_admin_password
+
+  reboot [shape=&quot;rectangle&quot;]
+  reboot -&gt; active
+  reboot -&gt; error
+  active -&gt; reboot
+  stopped -&gt; reboot
+  paused -&gt; reboot
+  suspended -&gt; reboot
+  error -&gt; reboot
+
+  live_migrate [shape=&quot;rectangle&quot;]
+  live_migrate -&gt; active
+  live_migrate -&gt; error
+  active -&gt; live_migrate
+
+  shelve [shape=&quot;rectangle&quot;]
+  shelve -&gt; shelved
+  shelve -&gt; shelved_offloaded
+  shelve -&gt; error
+  active -&gt; shelve
+  stopped -&gt; shelve
+  paused -&gt; shelve
+  suspended -&gt; shelve
+
+  shelve_offload [shape=&quot;rectangle&quot;]
+  shelve_offload -&gt; shelved_offloaded
+  shelve_offload -&gt; error
+  shelved -&gt; shelve_offload
+
+  unshelve [shape=&quot;rectangle&quot;]
+  unshelve -&gt; active
+  unshelve -&gt; error
+  shelved -&gt; unshelve
+  shelved_offloaded -&gt; unshelve
+}" />
+</p>
+<img alt="../_images/PowerStates1.png" src="../_images/PowerStates1.png" />
+<img alt="../_images/PowerStates2.png" src="../_images/PowerStates2.png" />
+</div>
+<div class="section" id="create-instance-states">
+<h2>Create instance states<a class="headerlink" href="#create-instance-states" title="Permalink to this headline">¶</a></h2>
+<p>The following diagram shows the sequence of VM states, task states, and
+power states when a new VM instance is created.</p>
+<img alt="../_images/run_instance_walkthrough.png" src="../_images/run_instance_walkthrough.png" />
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">Virtual Machine States and Transitions</a><ul>
+<li><a class="reference internal" href="#preconditions-for-commands">Preconditions for commands</a></li>
+<li><a class="reference internal" href="#create-instance-states">Create instance states</a></li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="threading.html"
+                                  title="previous chapter">Threading model</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="i18n.html"
+                                  title="next chapter">Internationalization</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/devref/vmstates.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="i18n.html" title="Internationalization"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="threading.html" title="Threading model"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Developer Guide</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

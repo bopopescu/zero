@@ -1,0 +1,205 @@
+From 3caafaf6253e17b9a6a6032a6466dfb88dbab919 Mon Sep 17 00:00:00 2001
+From: Nikola Dipanov <ndipanov@redhat.com>
+Date: Thu, 25 Jun 2015 12:19:29 +0100
+Subject: [PATCH] Add a nova-manage command for out-of-band migration of
+ pci_device data
+
+RHOS6 Data model divergence with regards to how numa node is stored in
+the DB will be handled by an online migration done by code in PciDevice
+object, but going forward to RHOS 8, we want to be able to drop this
+compatibility code.
+
+This patch adds a migration script that can be run by administrators
+can use this to run batch conversions on a running system until all
+records have transitioned.
+
+Downstram-only
+Resolves: rhbz#1203160
+
+Change-Id: I677a8f98b1bb04353941795775cb91a8acd89d52
+Reviewed-on: https://code.engineering.redhat.com/gerrit/51608
+Reviewed-by: Dan Smith <dansmith@redhat.com>
+Reviewed-by: Jon Schlueter <jschluet@redhat.com>
+Reviewed-by: Matthew Booth <mbooth@redhat.com>
+Tested-by: Matthew Booth <mbooth@redhat.com>
+---
+ nova/cmd/manage.py                  | 15 ++++++++++++
+ nova/db/api.py                      | 11 +++++++++
+ nova/db/sqlalchemy/api.py           | 28 ++++++++++++++++++++++
+ nova/tests/unit/db/test_db_api.py   | 47 +++++++++++++++++++++++++++++++++++++
+ nova/tests/unit/test_nova_manage.py | 10 ++++++++
+ 5 files changed, 111 insertions(+)
+
+diff --git a/nova/cmd/manage.py b/nova/cmd/manage.py
+index b2c0e3d..6429545 100644
+--- a/nova/cmd/manage.py
++++ b/nova/cmd/manage.py
+@@ -973,6 +973,21 @@ class DbCommands(object):
+         print(_('%(total)i instances matched query, %(done)i completed'),
+               {'total': match, 'done': done})
+ 
++    @args('--max-number', metavar='<number>',
++          help='Maximum number of PCI devices to consider')
++    def migrate_rhos_6_pci_device_data(self, max_number):
++        if max_number is not None:
++            max_number = int(max_number)
++            if max_number < 0:
++                print(_('Must supply a positive value for max_number'))
++                return(1)
++        admin_context = context.get_admin_context()
++
++        match, done = db.migrate_rhos_6_pci_device_data(
++            admin_context, max_number)
++        print(_('%(total)i PCI device records matched query, '
++                '%(done)i completed migration'),
++              {'total': match, 'done': done})
+ 
+ class ApiDbCommands(object):
+     """Class for managing the api database."""
+diff --git a/nova/db/api.py b/nova/db/api.py
+index 4aad16c..d07979e 100644
+--- a/nova/db/api.py
++++ b/nova/db/api.py
+@@ -1965,6 +1965,17 @@ def migrate_flavor_data(context, max_count, flavor_cache):
+     return IMPL.migrate_flavor_data(context, max_count, flavor_cache)
+ 
+ 
++def migrate_rhos_6_pci_device_data(context, max_count):
++    """Migrate numa_node information from the extra_info blob to a column
++
++    :param max_count: The maximum number of pci_devices to consider in this
++                      run.
++    :returns: number of pci_devices needing migration, number of pci_device
++              records migrated (both will always be less than max_count)
++    """
++    return IMPL.migrate_rhos_6_pci_device_data(context, max_count)
++
++
+ ####################
+ 
+ 
+diff --git a/nova/db/sqlalchemy/api.py b/nova/db/sqlalchemy/api.py
+index 64c6724..19bd499 100644
+--- a/nova/db/sqlalchemy/api.py
++++ b/nova/db/sqlalchemy/api.py
+@@ -6080,6 +6080,34 @@ def migrate_flavor_data(context, max_count, flavor_cache):
+     return count_all, count_hit
+ 
+ 
++@require_admin_context
++def migrate_rhos_6_pci_device_data(context, max_count):
++    # NOTE(danms): This is only ever run in nova-manage, and we need to avoid
++    # a circular import
++    from nova import objects
++
++    query = model_query(context, models.PciDevice).\
++                           filter_by(numa_node=None)
++
++    if max_count is not None:
++        pci_devs = query.limit(max_count)
++    else:
++        pci_devs = query.all()
++
++    count_all = 0
++    count_hit = 0
++    for pci_dev in pci_devs:
++        count_all += 1
++        # Let this do the migration
++        pci_dev_obj = objects.PciDevice._from_db_object(
++            context, objects.PciDevice(), pci_dev)
++        # Check if we need to actually do the save so that we can keep count
++        if pci_dev_obj.obj_what_changed():
++            pci_dev_obj.save()
++            count_hit += 1
++    return count_all, count_hit
++
++
+ ####################
+ 
+ 
+diff --git a/nova/tests/unit/db/test_db_api.py b/nova/tests/unit/db/test_db_api.py
+index 7cc9c94..e5c31f9 100644
+--- a/nova/tests/unit/db/test_db_api.py
++++ b/nova/tests/unit/db/test_db_api.py
+@@ -60,6 +60,7 @@ from nova.objects import base as obj_base
+ from nova import quota
+ from nova import test
+ from nova.tests.unit import matchers
++from nova.tests.unit.objects import test_pci_device
+ from nova import utils
+ 
+ CONF = cfg.CONF
+@@ -7655,6 +7656,52 @@ class FlavorMigrationTestCase(test.TestCase):
+         self.assertIsNotNone(extra.flavor)
+ 
+ 
++class MigrateRHOS6PciDeviceTestCase(test.TestCase):
++    def test_migrate_rhos6_pci_device(self):
++        self.context = context.get_admin_context()
++        values = test_pci_device.fake_db_dev_rhos_6_0
++        db.pci_device_update(self.context,
++                             values['compute_node_id'],
++                             values['address'],
++                             values)
++        match, done = db.migrate_rhos_6_pci_device_data(self.context, None)
++        self.assertEqual(1, match)
++        self.assertEqual(1, done)
++
++        dev = db.pci_device_get_by_id(self.context, values['id'])
++        self.assertEqual(0, dev.numa_node)
++        self.assertEqual('{}', dev.extra_info)
++
++    def test_migrate_rhos6_pci_device_no_match(self):
++        self.context = context.get_admin_context()
++        values = test_pci_device.fake_db_dev
++        db.pci_device_update(self.context,
++                             values['compute_node_id'],
++                             values['address'],
++                             values)
++        match, done = db.migrate_rhos_6_pci_device_data(self.context, None)
++        self.assertEqual(0, match)
++        self.assertEqual(0, done)
++
++        dev = db.pci_device_get_by_id(self.context, values['id'])
++        self.assertEqual(0, dev.numa_node)
++        self.assertEqual('{}', dev.extra_info)
++
++    def test_migrate_rhos6_pci_device_limit(self):
++        self.context = context.get_admin_context()
++        for i in xrange(10):
++            values = test_pci_device.fake_db_dev_rhos_6_0.copy()
++            values['id'] = values['compute_node_id'] = i
++            db.pci_device_update(self.context,
++                                values['compute_node_id'],
++                                values['address'],
++                                values)
++
++        match, done = db.migrate_rhos_6_pci_device_data(self.context, 4)
++        self.assertEqual(4, match)
++        self.assertEqual(4, done)
++
++
+ class ArchiveTestCase(test.TestCase):
+ 
+     def setUp(self):
+diff --git a/nova/tests/unit/test_nova_manage.py b/nova/tests/unit/test_nova_manage.py
+index cb9986f..532540e 100644
+--- a/nova/tests/unit/test_nova_manage.py
++++ b/nova/tests/unit/test_nova_manage.py
+@@ -416,6 +416,16 @@ class DBCommandsTestCase(test.TestCase):
+     def test_migrate_flavor_data_negative(self):
+         self.assertEqual(1, self.commands.migrate_flavor_data(-1))
+ 
++    @mock.patch('nova.db.migrate_rhos_6_pci_device_data')
++    def test_migrate_rhos_6_pci_device_data(self, migrate_mock):
++        migrate_mock.return_value = (1, 1)
++        self.assertEqual(None,
++                         self.commands.migrate_rhos_6_pci_device_data(None))
++        migrate_mock.assert_called_once_with(mock.ANY, None)
++
++    def test_migrate_rhos_6_pci_device_data_negative(self):
++        self.assertEqual(1, self.commands.migrate_rhos_6_pci_device_data(-1))
++
+     @mock.patch.object(sqla_migration, 'db_version', return_value=2)
+     def test_version(self, sqla_migrate):
+         self.commands.version()

@@ -1,0 +1,118 @@
+From 9e75e19c903325c9aa25bd8bd73f393c2fc1638c Mon Sep 17 00:00:00 2001
+From: Sylvain Bauza <sbauza@redhat.com>
+Date: Mon, 13 Apr 2015 15:03:06 +0200
+Subject: [PATCH] Invalidate AZ cache when the instance AZ information is
+ different
+
+When a new instance is created, the host value is set to None. As a corrolar,
+its AZ field is set to the default_availability_zone value.
+
+That's only when the host field is provided (ie. once the instance is started) that
+the AZ information is also updated. Unfornately, as the AZ module is using a cache
+system, it leaves the old AZ unchanged which can make the instance AZ data wrong.
+
+In order to fix that corner case, we need to compare both cache and instance values
+and if different, invalidate the cache key and leave it updated correctly by calling
+the AZ related information of the aggregate the host belongs to.
+
+Closes-Bug: #1390033
+(cherry picked from commit f8088e8b37e4927d1b191e6b8acfe34e8a833f91)
+
+Upstream-Liberty: https://review.openstack.org/#/c/172906/2
+Resolves: rhbz#1170242
+
+Conflicts:
+	nova/tests/unit/test_availability_zones.py
+	nova/tests/unit/test_metadata.py
+
+Change-Id: Ifff591ac71016acbb5e58be1b49f989baa03701f
+Reviewed-on: https://code.engineering.redhat.com/gerrit/45895
+Reviewed-by: Sahid Ferdjaoui <sahid.ferdjaoui@redhat.com>
+Tested-by: Sahid Ferdjaoui <sahid.ferdjaoui@redhat.com>
+---
+ nova/availability_zones.py                 |  7 +++++++
+ nova/tests/unit/test_availability_zones.py | 20 ++++++++++++++++++--
+ nova/tests/unit/test_metadata.py           |  3 ++-
+ 3 files changed, 27 insertions(+), 3 deletions(-)
+
+diff --git a/nova/availability_zones.py b/nova/availability_zones.py
+index b5f5434..7ff18d1 100644
+--- a/nova/availability_zones.py
++++ b/nova/availability_zones.py
+@@ -178,6 +178,13 @@ def get_instance_availability_zone(context, instance):
+     cache_key = _make_cache_key(host)
+     cache = _get_cache()
+     az = cache.get(cache_key)
++    az_inst = instance.get('availability_zone')
++    if az_inst is not None and az != az_inst:
++        # NOTE(sbauza): Cache is wrong, we need to invalidate it by fetching
++        # again the right AZ related to the aggregate the host belongs to.
++        # As the API is also calling this method for setting the instance
++        # AZ field, we don't need to update the instance.az field.
++        az = None
+     if not az:
+         elevated = context.elevated()
+         az = get_host_availability_zone(elevated, host)
+diff --git a/nova/tests/unit/test_availability_zones.py b/nova/tests/unit/test_availability_zones.py
+index 1c2a904..18bd76c 100644
+--- a/nova/tests/unit/test_availability_zones.py
++++ b/nova/tests/unit/test_availability_zones.py
+@@ -17,6 +17,7 @@
+ Tests for availability zones
+ """
+ 
++import mock
+ from oslo_config import cfg
+ 
+ from nova import availability_zones as az
+@@ -239,7 +240,8 @@ class AvailabilityZoneTestCases(test.TestCase):
+ 
+     def test_get_instance_availability_zone_default_value(self):
+         """Test get right availability zone by given an instance."""
+-        fake_inst = objects.Instance(host=self.host)
++        fake_inst = objects.Instance(host=self.host,
++                                     availability_zone=None)
+ 
+         self.assertEqual(self.default_az,
+                 az.get_instance_availability_zone(self.context, fake_inst))
+@@ -250,11 +252,25 @@ class AvailabilityZoneTestCases(test.TestCase):
+         service = self._create_service_with_topic('compute', host)
+         self._add_to_aggregate(service, self.agg)
+ 
+-        fake_inst = objects.Instance(host=host)
++        fake_inst = objects.Instance(host=host,
++                                     availability_zone=self.availability_zone)
+ 
+         self.assertEqual(self.availability_zone,
+                 az.get_instance_availability_zone(self.context, fake_inst))
+ 
++    @mock.patch.object(az._get_cache(), 'get')
++    def test_get_instance_availability_zone_cache_differs(self, cache_get):
++        host = 'host170'
++        service = self._create_service_with_topic('compute', host)
++        self._add_to_aggregate(service, self.agg)
++        cache_get.return_value = self.default_az
++
++        fake_inst = objects.Instance(host=host,
++                                     availability_zone=self.availability_zone)
++        self.assertEqual(
++            self.availability_zone,
++            az.get_instance_availability_zone(self.context, fake_inst))
++
+     def test_get_instance_availability_zone_no_host(self):
+         """Test get availability zone from instance if host not set."""
+         fake_inst = objects.Instance(host=None, availability_zone='inst-az')
+diff --git a/nova/tests/unit/test_metadata.py b/nova/tests/unit/test_metadata.py
+index efdfd20..e0dbc91 100644
+--- a/nova/tests/unit/test_metadata.py
++++ b/nova/tests/unit/test_metadata.py
+@@ -79,7 +79,8 @@ def fake_inst_obj(context):
+         metadata={},
+         default_ephemeral_device=None,
+         default_swap_device=None,
+-        system_metadata={})
++        system_metadata={},
++        availability_zone=None)
+     nwinfo = network_model.NetworkInfo([])
+     inst.info_cache = objects.InstanceInfoCache(context=context,
+                                                 instance_uuid=inst.uuid,

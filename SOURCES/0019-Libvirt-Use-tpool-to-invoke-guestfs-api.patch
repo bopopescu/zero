@@ -1,0 +1,40 @@
+From 4507dfcbcab458157105b73c0ff45681301629fa Mon Sep 17 00:00:00 2001
+From: Qin Zhao <chaochin@gmail.com>
+Date: Mon, 11 May 2015 15:01:38 +0800
+Subject: [PATCH] Libvirt: Use tpool to invoke guestfs api
+
+In inspect_capabilities() of nova/virt/disk/vfs/guestfs.py, guestfs
+api, which is C-extension, will hang nova-compute process when it is
+invoked. This problem will result in message queue timeout error and
+instance booting failure. Need to use tpool to invoke guestfs api, in
+order to make nova-compute switch to other green threads before
+guestfs api returns.
+
+(cherry picked from commit da9671aa7f597d3dd2cd6d09bb06998b209c962a)
+(cherry picked from commit 8e9ecf74c918273033d86342ec2aba419e86f998)
+
+Resolves: rhbz#1230485
+Upstream-Kilo: https://review.openstack.org/#/c/182044/
+Closes-Bug: 1453666
+Change-Id: I24187ba01965fb886351b78eee605bc052a94e21
+Reviewed-on: https://code.engineering.redhat.com/gerrit/51127
+Reviewed-by: Sahid Ferdjaoui <sahid.ferdjaoui@redhat.com>
+Reviewed-by: Matthew Booth <mbooth@redhat.com>
+Tested-by: Matthew Booth <mbooth@redhat.com>
+---
+ nova/virt/disk/vfs/guestfs.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/nova/virt/disk/vfs/guestfs.py b/nova/virt/disk/vfs/guestfs.py
+index 71a40d7..37a9cfa 100644
+--- a/nova/virt/disk/vfs/guestfs.py
++++ b/nova/virt/disk/vfs/guestfs.py
+@@ -74,7 +74,7 @@ class VFSGuestFS(vfs.VFS):
+     def inspect_capabilities(self):
+         """Determines whether guestfs is well configured."""
+         try:
+-            g = guestfs.GuestFS()
++            g = tpool.Proxy(guestfs.GuestFS())
+             g.add_drive("/dev/null")  # sic
+             g.launch()
+         except Exception as e:

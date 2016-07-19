@@ -1,0 +1,52 @@
+From 58c931ee1a8276f755310cb3dc5eb635e3f210a0 Mon Sep 17 00:00:00 2001
+From: Nikola Dipanov <ndipanov@redhat.com>
+Date: Fri, 24 Oct 2014 16:11:07 +0200
+Subject: [PATCH] Stash CPU policy related extra_spec in system_metadata
+
+This is a temporary measure before we have the flavor properly saved
+with the instance (see: https://review.openstack.org/#/c/126363/)
+
+This is really only needed for resize claims to work as expected. as all
+the info related to CPU pinning will be saved in the instance_extra
+table on boot.
+
+Change-Id: I90d3fc5e98fe3079a493c4cb169e830d99b01f62
+Blueprint: virt-driver-cpu-pinning
+---
+ nova/compute/flavors.py         | 2 +-
+ nova/tests/unit/test_flavors.py | 2 ++
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/nova/compute/flavors.py b/nova/compute/flavors.py
+index 27dcb33..45dce39 100644
+--- a/nova/compute/flavors.py
++++ b/nova/compute/flavors.py
+@@ -86,7 +86,7 @@ system_metadata_flavor_props = {
+ 
+ 
+ system_metadata_flavor_extra_props = [
+-    'hw:numa_cpus.', 'hw:numa_mem.',
++    'hw:numa_cpus.', 'hw:numa_mem.', 'hw:cpu_policy',
+ ]
+ 
+ 
+diff --git a/nova/tests/unit/test_flavors.py b/nova/tests/unit/test_flavors.py
+index 6133983..bc01d41 100644
+--- a/nova/tests/unit/test_flavors.py
++++ b/nova/tests/unit/test_flavors.py
+@@ -322,6 +322,7 @@ class InstanceTypeToolsTest(test.TestCase):
+             'hw:numa_cpus.0': '456',
+             'hw:numa_mem.1': '789',
+             'hw:numa_cpus.1': 'ABC',
++            'hw:cpu_policy': 'dedicated',
+             'foo': 'bar',
+         }
+         sysmeta = flavors.save_flavor_info({}, instance_type)
+@@ -331,6 +332,7 @@ class InstanceTypeToolsTest(test.TestCase):
+             'hw:numa_cpus.0': '456',
+             'hw:numa_mem.1': '789',
+             'hw:numa_cpus.1': 'ABC',
++            'hw:cpu_policy': 'dedicated',
+         }
+         self.assertEqual(expected_extra_specs, _instance_type['extra_specs'])
+         flavors.delete_flavor_info(sysmeta, '')

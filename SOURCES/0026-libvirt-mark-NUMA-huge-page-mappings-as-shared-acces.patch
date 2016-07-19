@@ -1,0 +1,362 @@
+From e63c6f504298b3a4d1ebc63d2129797e767eda84 Mon Sep 17 00:00:00 2001
+From: "Daniel P. Berrange" <berrange@redhat.com>
+Date: Wed, 22 Apr 2015 11:40:29 +0100
+Subject: [PATCH] libvirt: mark NUMA huge page mappings as shared access
+
+When a guest is configured to use huge page backed memory,
+these mappings should be marked as shared. This allows a
+external process connected to a vhostuser VIF type to
+access the guest RAM segment.
+
+(cherry picked from commit 25df2fae79c03a0335413e7a5de6b54c127e7926)
+
+ Conflicts:
+	nova/tests/unit/virt/libvirt/test_driver.py
+
+Upstream-Liberty: https://review.openstack.org/#/c/176360/
+Resolves: rhbz#1215790
+Closes-bug: #1447079
+Change-Id: I1136929d921cdb915de6553e6f0f93e7b29b547e
+Reviewed-on: https://code.engineering.redhat.com/gerrit/54138
+Tested-by: RHOS Jenkins <apevec+rhosci@redhat.com>
+Reviewed-by: Sahid Ferdjaoui <sahid.ferdjaoui@redhat.com>
+Tested-by: Sahid Ferdjaoui <sahid.ferdjaoui@redhat.com>
+---
+ nova/tests/unit/virt/libvirt/test_config.py |   9 +-
+ nova/tests/unit/virt/libvirt/test_driver.py | 135 +++++++++++++++++++++++++++-
+ nova/virt/libvirt/config.py                 |   4 +
+ nova/virt/libvirt/driver.py                 |  43 ++++++++-
+ 4 files changed, 184 insertions(+), 7 deletions(-)
+
+diff --git a/nova/tests/unit/virt/libvirt/test_config.py b/nova/tests/unit/virt/libvirt/test_config.py
+index 22fc17d..19be429 100644
+--- a/nova/tests/unit/virt/libvirt/test_config.py
++++ b/nova/tests/unit/virt/libvirt/test_config.py
+@@ -285,6 +285,7 @@ class LibvirtConfigGuestCPUNUMATest(LibvirtConfigBaseTest):
+         cell.id = 0
+         cell.cpus = set([0, 1])
+         cell.memory = 1000000
++        cell.memAccess = "shared"
+ 
+         obj.cells.append(cell)
+ 
+@@ -292,14 +293,15 @@ class LibvirtConfigGuestCPUNUMATest(LibvirtConfigBaseTest):
+         cell.id = 1
+         cell.cpus = set([2, 3])
+         cell.memory = 1500000
++        cell.memAccess = "private"
+ 
+         obj.cells.append(cell)
+ 
+         xml = obj.to_xml()
+         self.assertXmlEqual(xml, """
+             <numa>
+-              <cell id="0" cpus="0-1" memory="1000000"/>
+-              <cell id="1" cpus="2-3" memory="1500000"/>
++              <cell id="0" cpus="0-1" memory="1000000" memAccess="shared"/>
++              <cell id="1" cpus="2-3" memory="1500000" memAccess="private"/>
+             </numa>
+         """)
+ 
+@@ -430,6 +432,7 @@ class LibvirtConfigGuestCPUTest(LibvirtConfigBaseTest):
+         cell.id = 0
+         cell.cpus = set([0, 1])
+         cell.memory = 1000000
++        cell.memAccess = "private"
+ 
+         numa.cells.append(cell)
+ 
+@@ -446,7 +449,7 @@ class LibvirtConfigGuestCPUTest(LibvirtConfigBaseTest):
+         self.assertXmlEqual(xml, """
+             <cpu mode="host-model" match="exact">
+               <numa>
+-                <cell id="0" cpus="0-1" memory="1000000"/>
++                <cell id="0" cpus="0-1" memory="1000000" memAccess="private"/>
+                 <cell id="1" cpus="2-3" memory="1500000"/>
+               </numa>
+             </cpu>
+diff --git a/nova/tests/unit/virt/libvirt/test_driver.py b/nova/tests/unit/virt/libvirt/test_driver.py
+index 8cf98d3..a5f20c4 100644
+--- a/nova/tests/unit/virt/libvirt/test_driver.py
++++ b/nova/tests/unit/virt/libvirt/test_driver.py
+@@ -1638,6 +1638,7 @@ class LibvirtConnTestCase(test.NoDBTestCase):
+                 self.assertEqual(instance_cell.cpuset, numa_cfg_cell.cpus)
+                 self.assertEqual(instance_cell.memory * units.Ki,
+                                  numa_cfg_cell.memory)
++                self.assertIsNone(numa_cfg_cell.memAccess)
+ 
+             allnodes = set([cell.id for cell in instance_topology.cells])
+             self.assertEqual(allnodes, set(cfg.numatune.memory.nodeset))
+@@ -1714,6 +1715,7 @@ class LibvirtConnTestCase(test.NoDBTestCase):
+                 self.assertEqual(instance_cell.cpuset, numa_cfg_cell.cpus)
+                 self.assertEqual(instance_cell.memory * units.Ki,
+                                  numa_cfg_cell.memory)
++                self.assertIsNone(numa_cfg_cell.memAccess)
+ 
+             allnodes = set([cell.id for cell in instance_topology.cells])
+             self.assertEqual(allnodes, set(cfg.numatune.memory.nodeset))
+@@ -1725,27 +1727,156 @@ class LibvirtConnTestCase(test.NoDBTestCase):
+                 self.assertEqual([instance_cell.id], memnode.nodeset)
+                 self.assertEqual("strict", memnode.mode)
+ 
++    def test_get_guest_config_numa_host_mempages_shared(self):
++        instance_topology = objects.InstanceNUMATopology(
++            cells=[
++                objects.InstanceNUMACell(
++                    id=1, cpuset=set([0, 1]),
++                    memory=1024, pagesize=2048),
++                objects.InstanceNUMACell(
++                    id=2, cpuset=set([2, 3]),
++                    memory=1024, pagesize=2048)])
++        instance_ref = objects.Instance(**self.test_instance)
++        instance_ref.numa_topology = instance_topology
++        image_meta = {}
++        flavor = objects.Flavor(memory_mb=2048, vcpus=4, root_gb=496,
++                                ephemeral_gb=8128, swap=33550336, name='fake',
++                                extra_specs={})
++        instance_ref.flavor = flavor
++
++        caps = vconfig.LibvirtConfigCaps()
++        caps.host = vconfig.LibvirtConfigCapsHost()
++        caps.host.cpu = vconfig.LibvirtConfigCPU()
++        caps.host.cpu.arch = "x86_64"
++        caps.host.topology = self._fake_caps_numa_topology()
++
++        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
++        disk_info = blockinfo.get_disk_info(CONF.libvirt.virt_type,
++                                            instance_ref,
++                                            image_meta)
++
++        with contextlib.nested(
++                mock.patch.object(
++                    objects.InstanceNUMATopology, "get_by_instance_uuid",
++                    return_value=instance_topology),
++                mock.patch.object(host.Host, 'has_min_version',
++                                  return_value=True),
++                mock.patch.object(host.Host, "get_capabilities",
++                                  return_value=caps),
++                mock.patch.object(
++                    hardware, 'get_vcpu_pin_set',
++                    return_value=set([2, 3, 4, 5])),
++                mock.patch.object(host.Host, 'get_online_cpus',
++                                  return_value=set(range(8))),
++                ):
++            cfg = drvr._get_guest_config(instance_ref, [], {}, disk_info)
++
++            for instance_cell, numa_cfg_cell, index in zip(
++                    instance_topology.cells,
++                    cfg.cpu.numa.cells,
++                    range(len(instance_topology.cells))):
++                self.assertEqual(index, numa_cfg_cell.id)
++                self.assertEqual(instance_cell.cpuset, numa_cfg_cell.cpus)
++                self.assertEqual(instance_cell.memory * units.Ki,
++                                 numa_cfg_cell.memory)
++                self.assertEqual("shared", numa_cfg_cell.memAccess)
++
++            allnodes = [cell.id for cell in instance_topology.cells]
++            self.assertEqual(allnodes, cfg.numatune.memory.nodeset)
++            self.assertEqual("strict", cfg.numatune.memory.mode)
++
++            for instance_cell, memnode, index in zip(
++                    instance_topology.cells,
++                    cfg.numatune.memnodes,
++                    range(len(instance_topology.cells))):
++                self.assertEqual(index, memnode.cellid)
++                self.assertEqual([instance_cell.id], memnode.nodeset)
++                self.assertEqual("strict", memnode.mode)
++
+     def test_get_cpu_numa_config_from_instance(self):
+         topology = objects.InstanceNUMATopology(cells=[
+             objects.InstanceNUMACell(id=0, cpuset=set([1, 2]), memory=128),
+             objects.InstanceNUMACell(id=1, cpuset=set([3, 4]), memory=128),
+         ])
+         drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+-        conf = drvr._get_cpu_numa_config_from_instance(topology)
++        conf = drvr._get_cpu_numa_config_from_instance(topology, True)
+ 
+         self.assertIsInstance(conf, vconfig.LibvirtConfigGuestCPUNUMA)
+         self.assertEqual(0, conf.cells[0].id)
+         self.assertEqual(set([1, 2]), conf.cells[0].cpus)
+         self.assertEqual(131072, conf.cells[0].memory)
++        self.assertEqual("shared", conf.cells[0].memAccess)
+         self.assertEqual(1, conf.cells[1].id)
+         self.assertEqual(set([3, 4]), conf.cells[1].cpus)
+         self.assertEqual(131072, conf.cells[1].memory)
++        self.assertEqual("shared", conf.cells[1].memAccess)
+ 
+     def test_get_cpu_numa_config_from_instance_none(self):
+         drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+-        conf = drvr._get_cpu_numa_config_from_instance(None)
++        conf = drvr._get_cpu_numa_config_from_instance(None, False)
+         self.assertIsNone(conf)
+ 
++    @mock.patch.object(libvirt_driver.LibvirtDriver, "_has_numa_support",
++                       return_value=True)
++    @mock.patch.object(libvirt_driver.LibvirtDriver, "_has_hugepage_support",
++                       return_value=True)
++    @mock.patch.object(host.Host, "get_capabilities")
++    def test_does_not_want_hugepages(self, mock_caps, mock_numa, mock_hp):
++        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
++        instance_topology = objects.InstanceNUMATopology(
++            cells=[
++                objects.InstanceNUMACell(
++                    id=1, cpuset=set([0, 1]),
++                    memory=1024, pagesize=4),
++                objects.InstanceNUMACell(
++                    id=2, cpuset=set([2, 3]),
++                    memory=1024, pagesize=4)])
++
++        caps = vconfig.LibvirtConfigCaps()
++        caps.host = vconfig.LibvirtConfigCapsHost()
++        caps.host.cpu = vconfig.LibvirtConfigCPU()
++        caps.host.cpu.arch = "x86_64"
++        caps.host.topology = self._fake_caps_numa_topology()
++
++        mock_caps.return_value = caps
++
++        host_topology = drvr._get_host_numa_topology()
++
++        self.assertFalse(drvr._wants_hugepages(None, None))
++        self.assertFalse(drvr._wants_hugepages(host_topology, None))
++        self.assertFalse(drvr._wants_hugepages(None, instance_topology))
++        self.assertFalse(drvr._wants_hugepages(host_topology,
++                                               instance_topology))
++
++    @mock.patch.object(libvirt_driver.LibvirtDriver, "_has_numa_support",
++                       return_value=True)
++    @mock.patch.object(libvirt_driver.LibvirtDriver, "_has_hugepage_support",
++                       return_value=True)
++    @mock.patch.object(host.Host, "get_capabilities")
++    def test_does_want_hugepages(self, mock_caps, mock_numa, mock_hp):
++        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
++        instance_topology = objects.InstanceNUMATopology(
++            cells=[
++                objects.InstanceNUMACell(
++                    id=1, cpuset=set([0, 1]),
++                    memory=1024, pagesize=2048),
++                objects.InstanceNUMACell(
++                    id=2, cpuset=set([2, 3]),
++                    memory=1024, pagesize=2048)])
++
++        caps = vconfig.LibvirtConfigCaps()
++        caps.host = vconfig.LibvirtConfigCapsHost()
++        caps.host.cpu = vconfig.LibvirtConfigCPU()
++        caps.host.cpu.arch = "x86_64"
++        caps.host.topology = self._fake_caps_numa_topology()
++
++        mock_caps.return_value = caps
++
++        host_topology = drvr._get_host_numa_topology()
++
++        self.assertTrue(drvr._wants_hugepages(host_topology,
++                                              instance_topology))
++
+     def test_get_guest_config_clock(self):
+         self.flags(virt_type='kvm', group='libvirt')
+         drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), True)
+diff --git a/nova/virt/libvirt/config.py b/nova/virt/libvirt/config.py
+index 10678c5..26aad03 100644
+--- a/nova/virt/libvirt/config.py
++++ b/nova/virt/libvirt/config.py
+@@ -509,6 +509,7 @@ class LibvirtConfigGuestCPUNUMACell(LibvirtConfigObject):
+         self.id = None
+         self.cpus = None
+         self.memory = None
++        self.memAccess = None
+ 
+     def parse_dom(self, xmldoc):
+         if xmldoc.get("id") is not None:
+@@ -517,6 +518,7 @@ class LibvirtConfigGuestCPUNUMACell(LibvirtConfigObject):
+             self.memory = int(xmldoc.get("memory"))
+         if xmldoc.get("cpus") is not None:
+             self.cpus = hardware.parse_cpu_spec(xmldoc.get("cpus"))
++        self.memAccess = xmldoc.get("memAccess")
+ 
+     def format_dom(self):
+         cell = super(LibvirtConfigGuestCPUNUMACell, self).format_dom()
+@@ -528,6 +530,8 @@ class LibvirtConfigGuestCPUNUMACell(LibvirtConfigObject):
+                      hardware.format_cpu_spec(self.cpus))
+         if self.memory is not None:
+             cell.set("memory", str(self.memory))
++        if self.memAccess is not None:
++            cell.set("memAccess", self.memAccess)
+ 
+         return cell
+ 
+diff --git a/nova/virt/libvirt/driver.py b/nova/virt/libvirt/driver.py
+index c5ee477..9815234 100644
+--- a/nova/virt/libvirt/driver.py
++++ b/nova/virt/libvirt/driver.py
+@@ -3485,7 +3485,8 @@ class LibvirtDriver(driver.ComputeDriver):
+                     setattr(guest.cputune, name,
+                             int(flavor.extra_specs[key]))
+ 
+-    def _get_cpu_numa_config_from_instance(self, instance_numa_topology):
++    def _get_cpu_numa_config_from_instance(self, instance_numa_topology,
++                                           wants_hugepages):
+         if instance_numa_topology:
+             guest_cpu_numa = vconfig.LibvirtConfigGuestCPUNUMA()
+             for instance_cell in instance_numa_topology.cells:
+@@ -3493,6 +3494,20 @@ class LibvirtDriver(driver.ComputeDriver):
+                 guest_cell.id = instance_cell.id
+                 guest_cell.cpus = instance_cell.cpuset
+                 guest_cell.memory = instance_cell.memory * units.Ki
++
++                # The vhost-user network backend requires file backed
++                # guest memory (ie huge pages) to be marked as shared
++                # access, not private, so an external process can read
++                # and write the pages.
++                #
++                # You can't change the shared vs private flag for an
++                # already running guest, and since we can't predict what
++                # types of NIC may be hotplugged, we have no choice but
++                # to unconditionally turn on the shared flag. This has
++                # no real negative functional effect on the guest, so
++                # is a reasonable approach to take
++                if wants_hugepages:
++                    guest_cell.memAccess = "shared"
+                 guest_cpu_numa.cells.append(guest_cell)
+             return guest_cpu_numa
+ 
+@@ -3504,6 +3519,28 @@ class LibvirtDriver(driver.ComputeDriver):
+                     'Invalid libvirt version %(version)s') % {'version': ver_})
+         return True
+ 
++    def _wants_hugepages(self, host_topology, instance_topology):
++        """Determine if the guest / host topology implies the
++           use of huge pages for guest RAM backing
++        """
++
++        if host_topology is None or instance_topology is None:
++            return False
++
++        avail_pagesize = [page.size_kb
++                          for page in host_topology.cells[0].mempages]
++        avail_pagesize.sort()
++        # Remove smallest page size as that's not classed as a largepage
++        avail_pagesize = avail_pagesize[1:]
++
++        # See if we have page size set
++        for cell in instance_topology.cells:
++            if (cell.pagesize is not None and
++                cell.pagesize in avail_pagesize):
++                return True
++
++        return False
++
+     def _get_guest_numa_config(self, instance_numa_topology, flavor, pci_devs,
+                                allowed_cpus=None):
+         """Returns the config objects for the guest NUMA specs.
+@@ -3544,9 +3581,11 @@ class LibvirtDriver(driver.ComputeDriver):
+             raise exception.NUMATopologyUnsupported()
+ 
+         topology = self._get_host_numa_topology()
++
+         # We have instance NUMA so translate it to the config class
+         guest_cpu_numa_config = self._get_cpu_numa_config_from_instance(
+-                instance_numa_topology)
++                instance_numa_topology,
++                self._wants_hugepages(topology, instance_numa_topology))
+ 
+         if not guest_cpu_numa_config:
+             # No NUMA topology defined for instance

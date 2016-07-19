@@ -1,0 +1,189 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>nova-api-ec2 &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="up" title="Command-line Utilities" href="index.html" />
+    <link rel="next" title="nova-api-metadata" href="nova-api-metadata.html" />
+    <link rel="prev" title="nova-all" href="nova-all.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="nova-api-ec2">
+<h1>nova-api-ec2<a class="headerlink" href="#nova-api-ec2" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="server-for-the-nova-ec2-api">
+<h2>Server for the Nova EC2 API<a class="headerlink" href="#server-for-the-nova-ec2-api" title="Permalink to this headline">¶</a></h2>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Author:</th><td class="field-body"><a class="reference external" href="mailto:openstack&#37;&#52;&#48;lists&#46;openstack&#46;org">openstack<span>&#64;</span>lists<span>&#46;</span>openstack<span>&#46;</span>org</a></td>
+</tr>
+<tr class="field-even field"><th class="field-name">Date:</th><td class="field-body">2012-09-27</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Copyright:</th><td class="field-body">OpenStack Foundation</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Version:</th><td class="field-body">2012.1</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Manual section:</th><td class="field-body">1</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Manual group:</th><td class="field-body">cloud computing</td>
+</tr>
+</tbody>
+</table>
+<div class="section" id="synopsis">
+<h3>SYNOPSIS<a class="headerlink" href="#synopsis" title="Permalink to this headline">¶</a></h3>
+<blockquote>
+<div>nova-api-ec2  [options]</div></blockquote>
+</div>
+<div class="section" id="description">
+<h3>DESCRIPTION<a class="headerlink" href="#description" title="Permalink to this headline">¶</a></h3>
+<p>nova-api-ec2 is a server daemon that serves the Nova EC2 API</p>
+</div>
+<div class="section" id="options">
+<h3>OPTIONS<a class="headerlink" href="#options" title="Permalink to this headline">¶</a></h3>
+<blockquote>
+<div><strong>General options</strong></div></blockquote>
+</div>
+<div class="section" id="files">
+<h3>FILES<a class="headerlink" href="#files" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>/etc/nova/nova.conf</li>
+<li>/etc/nova/api-paste.ini</li>
+<li>/etc/nova/policy.json</li>
+<li>/etc/nova/rootwrap.conf</li>
+<li>/etc/nova/rootwrap.d/</li>
+</ul>
+</div>
+<div class="section" id="see-also">
+<h3>SEE ALSO<a class="headerlink" href="#see-also" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><a class="reference external" href="http://nova.openstack.org">OpenStack Nova</a></li>
+</ul>
+</div>
+<div class="section" id="bugs">
+<h3>BUGS<a class="headerlink" href="#bugs" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>Nova bugs are managed at Launchpad <a class="reference external" href="https://bugs.launchpad.net/nova">Bugs : Nova</a></li>
+</ul>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">nova-api-ec2</a><ul>
+<li><a class="reference internal" href="#server-for-the-nova-ec2-api">Server for the Nova EC2 API</a><ul>
+<li><a class="reference internal" href="#synopsis">SYNOPSIS</a></li>
+<li><a class="reference internal" href="#description">DESCRIPTION</a></li>
+<li><a class="reference internal" href="#options">OPTIONS</a></li>
+<li><a class="reference internal" href="#files">FILES</a></li>
+<li><a class="reference internal" href="#see-also">SEE ALSO</a></li>
+<li><a class="reference internal" href="#bugs">BUGS</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="nova-all.html"
+                                  title="previous chapter">nova-all</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="nova-api-metadata.html"
+                                  title="next chapter">nova-api-metadata</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/man/nova-api-ec2.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="nova-api-metadata.html" title="nova-api-metadata"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="nova-all.html" title="nova-all"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Command-line Utilities</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

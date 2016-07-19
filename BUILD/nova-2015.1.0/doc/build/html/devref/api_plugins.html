@@ -1,0 +1,248 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>API Plugins &mdash; nova 23.fc23 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/support-matrix.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/tweaks.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '23.fc23',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="nova 23.fc23 documentation" href="../index.html" />
+    <link rel="up" title="Developer Guide" href="index.html" />
+    <link rel="next" title="API Microversions" href="api_microversions.html" />
+    <link rel="prev" title="Guru Meditation Reports" href="gmr.html" /> 
+  </head>
+  <body>
+  <div id="header">
+    <h1 id="logo"><a href="http://www.openstack.org/">OpenStack</a></h1>
+    <ul id="navigation">
+      
+      <li><a href="http://www.openstack.org/" title="Go to the Home page" class="link">Home</a></li>
+      <li><a href="http://www.openstack.org/projects/" title="Go to the OpenStack Projects page">Projects</a></li>
+      <li><a href="http://www.openstack.org/user-stories/" title="Go to the User Stories page" class="link">User Stories</a></li>
+      <li><a href="http://www.openstack.org/community/" title="Go to the Community page" class="link">Community</a></li>
+      <li><a href="http://www.openstack.org/blog/" title="Go to the OpenStack Blog">Blog</a></li>
+      <li><a href="http://wiki.openstack.org/" title="Go to the OpenStack Wiki">Wiki</a></li>
+      <li><a href="http://docs.openstack.org/" title="Go to OpenStack Documentation" class="current">Documentation</a></li>
+      
+    </ul>
+  </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="api-plugins">
+<h1>API Plugins<a class="headerlink" href="#api-plugins" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="background">
+<h2>Background<a class="headerlink" href="#background" title="Permalink to this headline">¶</a></h2>
+<p>Nova has two API plugin frameworks, one for the original V2 API and
+one for what we call V2.1 which also supports V2.1 microversions. The
+V2.1 API acts from a REST API user point of view in an identical way
+to the original V2 API. V2.1 is implemented in the same framework as
+microversions, with the version requested being 2.1.</p>
+<p>The V2 API is now frozen and with the exception of significant bugs no
+change should be made to the V2 API code. API changes should only be
+made through V2.1 microversions.</p>
+<p>This document covers how to write plugins for the v2.1 framework. A
+<a class="reference external" href="http://docs.openstack.org/developer/nova/devref/api_microversions.html">microversions specific document</a>
+covers the details around what is required for the microversions
+part. It does not cover V2 plugins which should no longer be developed.</p>
+<p>There may still be references to a v3 API both in comments and in the
+directory path of relevant files. This is because v2.1 first started
+out being called v3 rather than v2.1. Where you see references to v3
+you can treat it as a reference to v2.1 with or without microversions
+support.</p>
+<p>The original V2 API plugins live in <tt class="docutils literal"><span class="pre">nova/api/openstack/compute/contrib</span></tt>
+and the V2.1 plugins live in <tt class="docutils literal"><span class="pre">nova/api/openstack/compute/plugins/v3</span></tt>.</p>
+<p>Note that any change to the Nova API to be merged will first require a
+spec be approved first. See <a class="reference external" href="https://github.com/openstack/nova-specs">here</a>
+for the appropriate repository. For guidance on the design of the API
+please refer to the <a class="reference external" href="https://wiki.openstack.org/wiki/API_Working_Group">Openstack API WG</a></p>
+</div>
+<div class="section" id="basic-plugin-structure">
+<h2>Basic plugin structure<a class="headerlink" href="#basic-plugin-structure" title="Permalink to this headline">¶</a></h2>
+<p>A very basic skeleton of a v2.1 plugin can be seen <a class="reference external" href="http://git.openstack.org/cgit/openstack/nova/tree/nova/tests/unit/api/openstack/compute/test_plugins/basic.py">here in the unittests</a>. An annotated version below:</p>
+<div class="highlight-python"><div class="highlight"><pre><span></span><span class="sd">&quot;&quot;&quot;Basic Test Extension&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">nova.api.openstack</span> <span class="kn">import</span> <span class="n">extensions</span>
+<span class="kn">from</span> <span class="nn">nova.api.openstack</span> <span class="kn">import</span> <span class="n">wsgi</span>
+
+
+<span class="n">ALIAS</span> <span class="o">=</span> <span class="s1">&#39;test-basic&#39;</span>
+<span class="c1"># ALIAS needs to be unique and should be of the format</span>
+<span class="c1"># ^[a-z]+[a-z\-]*[a-z]$</span>
+
+<span class="k">class</span> <span class="nc">BasicController</span><span class="p">(</span><span class="n">wsgi</span><span class="o">.</span><span class="n">Controller</span><span class="p">):</span>
+
+    <span class="c1"># Define support for GET on a collection</span>
+    <span class="k">def</span> <span class="nf">index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">req</span><span class="p">):</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;param&#39;</span><span class="p">:</span> <span class="s1">&#39;val&#39;</span><span class="p">}</span>
+        <span class="k">return</span> <span class="n">data</span>
+
+    <span class="c1"># Defining a method implements the following API responses:</span>
+    <span class="c1">#   delete -&gt; DELETE</span>
+    <span class="c1">#   update -&gt; PUT</span>
+    <span class="c1">#   create -&gt; POST</span>
+    <span class="c1">#   show -&gt; GET</span>
+    <span class="c1"># If a method is not definied a request to it will be a 404 response</span>
+
+    <span class="c1"># It is also possible to define support for further responses</span>
+    <span class="c1"># See `servers.py &lt;http://git.openstack.org/cgit/openstack/nova/tree/nova/nova/api/openstack/compute/plugins/v3/servers.py&gt;`_.</span>
+
+
+<span class="k">class</span> <span class="nc">Basic</span><span class="p">(</span><span class="n">extensions</span><span class="o">.</span><span class="n">V3APIExtensionBase</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Basic Test Extension.&quot;&quot;&quot;</span>
+
+    <span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;BasicTest&quot;</span>
+    <span class="n">alias</span> <span class="o">=</span> <span class="n">ALIAS</span>
+    <span class="n">version</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="c1"># Both get_resources and get_controller_extensions must always</span>
+    <span class="c1"># be definied by can return an empty array</span>
+    <span class="k">def</span> <span class="nf">get_resources</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">resource</span> <span class="o">=</span> <span class="n">extensions</span><span class="o">.</span><span class="n">ResourceExtension</span><span class="p">(</span><span class="s1">&#39;test&#39;</span><span class="p">,</span> <span class="n">BasicController</span><span class="p">())</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">resource</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">get_controller_extensions</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[]</span>
+</pre></div>
+</div>
+<p>All of these plugin files should live in the <tt class="docutils literal"><span class="pre">nova/api/openstack/compute/plugins/v3</span></tt> directory.</p>
+<div class="section" id="policy">
+<h3>Policy<a class="headerlink" href="#policy" title="Permalink to this headline">¶</a></h3>
+<p>Policy (permission) is defined <tt class="docutils literal"><span class="pre">etc/nova/policy.json</span></tt>. Implementation of policy
+is changing a bit at the moment. Will add more to this document or reference
+another one in the future. Note that a &#8216;discoverable&#8217; policy needs to be added
+for each plugin that you wish to appear in the <tt class="docutils literal"><span class="pre">/extension</span></tt> output. Also
+look at the authorize call in plugins currently merged.</p>
+</div>
+</div>
+<div class="section" id="support-files">
+<h2>Support files<a class="headerlink" href="#support-files" title="Permalink to this headline">¶</a></h2>
+<p>At least one entry needs to made in <tt class="docutils literal"><span class="pre">setup.cfg</span></tt> for each plugin.
+An entry point for the plugin must be added to nova.api.v3.extensions
+even if no resource or controller is added. Other entry points available
+are</p>
+<ul class="simple">
+<li>Modify create behaviour (nova.api.v3.extensions.server.create)</li>
+<li>Modify rebuild behaviour (nova.api.v3.extensions.server.rebuild)</li>
+<li>Modify update behaviour (nova.api.v3.extensions.server.update)</li>
+<li>Modify resize behaviour (nova.api.v3.extensions.server.resize)</li>
+</ul>
+<p>These are essentially hooks into the servers plugin which allow other
+plugins to modify behaviour without having to modify servers.py. In
+the past not having this capability led to very large chunks of
+unrelated code being added to servers.py which was difficult to
+maintain.</p>
+</div>
+<div class="section" id="unit-tests">
+<h2>Unit Tests<a class="headerlink" href="#unit-tests" title="Permalink to this headline">¶</a></h2>
+<p>Should write something more here. But you need to have
+both unit and functional tests.</p>
+</div>
+<div class="section" id="functional-tests-and-api-samples">
+<h2>Functional tests and API Samples<a class="headerlink" href="#functional-tests-and-api-samples" title="Permalink to this headline">¶</a></h2>
+<p>Should write something here</p>
+</div>
+<div class="section" id="commit-message-tags">
+<h2>Commit message tags<a class="headerlink" href="#commit-message-tags" title="Permalink to this headline">¶</a></h2>
+<p>Please ensure you add the <tt class="docutils literal"><span class="pre">DocImpact</span></tt> tag along with a short
+description for any API change.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+<div class="sphinxsidebar">
+    <div class="sphinxsidebarwrapper">
+            <h3><a href="../index.html">Table Of Contents</a></h3>
+            <ul>
+<li><a class="reference internal" href="#">API Plugins</a><ul>
+<li><a class="reference internal" href="#background">Background</a></li>
+<li><a class="reference internal" href="#basic-plugin-structure">Basic plugin structure</a><ul>
+<li><a class="reference internal" href="#policy">Policy</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#support-files">Support files</a></li>
+<li><a class="reference internal" href="#unit-tests">Unit Tests</a></li>
+<li><a class="reference internal" href="#functional-tests-and-api-samples">Functional tests and API Samples</a></li>
+<li><a class="reference internal" href="#commit-message-tags">Commit message tags</a></li>
+</ul>
+</li>
+</ul>
+
+            <h4>Previous topic</h4>
+            <p class="topless"><a href="gmr.html"
+                                  title="previous chapter">Guru Meditation Reports</a></p>
+            <h4>Next topic</h4>
+            <p class="topless"><a href="api_microversions.html"
+                                  title="next chapter">API Microversions</a></p>
+            <h3>This Page</h3>
+            <ul class="this-page-menu">
+              <li><a href="../_sources/devref/api_plugins.txt"
+                     rel="nofollow">Show Source</a></li>
+            </ul>
+          <div id="searchbox" style="display: none">
+            <h3>Quick search</h3>
+              <form class="search" action="../search.html" method="get">
+                <input type="text" name="q" size="18" />
+                <input type="submit" value="Go" />
+                <input type="hidden" name="check_keywords" value="yes" />
+                <input type="hidden" name="area" value="default" />
+              </form>
+              <p class="searchtip" style="font-size: 90%">
+              Enter search terms or a module, class or function name.
+              </p>
+          </div>
+          <script type="text/javascript">$('#searchbox').show(0);</script>
+    </div>
+</div>
+
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="api_microversions.html" title="API Microversions"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="gmr.html" title="Guru Meditation Reports"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">nova 23.fc23 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Developer Guide</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2010-present, OpenStack Foundation.
+      Last updated on May 16, 2016.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

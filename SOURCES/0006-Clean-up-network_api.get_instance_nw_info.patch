@@ -1,0 +1,55 @@
+From 8233ca5948552b4edcd8a9800b30595f20b1b3dc Mon Sep 17 00:00:00 2001
+From: Rui Chen <chenrui.momo@gmail.com>
+Date: Wed, 15 Apr 2015 13:05:20 +0800
+Subject: [PATCH] Clean up network_api.get_instance_nw_info
+
+All methods of ComputeManager use self._get_instance_nw_info
+except 'external_instance_event', it make no sense that there
+are two ways to do same thing. Unify all methods of ComputeManager
+to use self._get_instance_nw_info.
+
+Change-Id: Ica58122c60c9e2d3e6740d458559ddf4b5a652be
+(cherry picked from commit a8ee3185eadec1435d53d308e9ca9dc03688ce9e)
+Reviewed-on: https://code.engineering.redhat.com/gerrit/46259
+Tested-by: RHOS Jenkins <apevec+rhosci@redhat.com>
+Reviewed-by: Victor Stinner <vstinner@redhat.com>
+---
+ nova/compute/manager.py                     | 2 +-
+ nova/tests/unit/compute/test_compute_mgr.py | 8 ++++----
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/nova/compute/manager.py b/nova/compute/manager.py
+index 5d86698..b29d798 100644
+--- a/nova/compute/manager.py
++++ b/nova/compute/manager.py
+@@ -6444,7 +6444,7 @@ class ComputeManager(manager.Manager):
+                       {'event': event.key},
+                       instance=instance)
+             if event.name == 'network-changed':
+-                self.network_api.get_instance_nw_info(context, instance)
++                self._get_instance_nw_info(context, instance)
+             else:
+                 self._process_instance_event(instance, event)
+ 
+diff --git a/nova/tests/unit/compute/test_compute_mgr.py b/nova/tests/unit/compute/test_compute_mgr.py
+index 399a1e4..93ff446 100644
+--- a/nova/tests/unit/compute/test_compute_mgr.py
++++ b/nova/tests/unit/compute/test_compute_mgr.py
+@@ -1657,13 +1657,13 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase):
+             objects.InstanceExternalEvent(name='foo', instance_uuid='uuid2',
+                                           tag='tag2')]
+ 
+-        @mock.patch.object(self.compute.network_api, 'get_instance_nw_info')
++        @mock.patch.object(self.compute, '_get_instance_nw_info')
+         @mock.patch.object(self.compute, '_process_instance_event')
+-        def do_test(_process_instance_event, get_instance_nw_info):
++        def do_test(_process_instance_event, _get_instance_nw_info):
+             self.compute.external_instance_event(self.context,
+                                                  instances, events)
+-            get_instance_nw_info.assert_called_once_with(self.context,
+-                                                         instances[0])
++            _get_instance_nw_info.assert_called_once_with(self.context,
++                                                          instances[0])
+             _process_instance_event.assert_called_once_with(instances[1],
+                                                             events[1])
+         do_test()
